@@ -18,9 +18,9 @@ class MultiHeadAttention(nn.Module):
         self.head_size = d_model // num_heads  # TODO hyperparameter
 
         # project each square representation into queries, keys, and values
-        self.keys = nn.Linear(d_model, d_model)
-        self.queries = nn.Linear(d_model, d_model)
-        self.values = nn.Linear(d_model, d_model)
+        self.keys = nn.Linear(d_model, d_model, bias=False)
+        self.queries = nn.Linear(d_model, d_model, bias=False)
+        self.values = nn.Linear(d_model, d_model, bias=False)
 
         # generate geometric attention biases for each head
         self.gab = GeometricAttentionBias(
