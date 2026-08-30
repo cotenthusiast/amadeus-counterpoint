@@ -38,9 +38,9 @@ class TransformerBlock(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.linear2 = nn.Linear(d_ff, d_model)
 
-        # post-norm LayerNorms
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
+        # post-norm RMSNorms
+        self.norm1 = nn.RMSNorm(d_model)
+        self.norm2 = nn.RMSNorm(d_model)
 
         # dropout before each residual connection
         self.dropout1 = nn.Dropout(dropout)
