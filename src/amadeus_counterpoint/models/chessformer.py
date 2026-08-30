@@ -25,8 +25,9 @@ class Chessformer(nn.Module):
         self.elo_low = nn.Embedding(1, elo_dim)
         self.elo_high = nn.Embedding(1, elo_dim)        
 
-        # shared GAB transformation
-        self.d34096 = nn.Linear(d3, 4096, bias=False)
+        # shared GAB template bank, one set of weights across every block
+        self.d34096 = nn.Parameter(torch.empty(4096, d3))
+        nn.init.xavier_normal_(self.d34096)
 
         # transform raw input features into model representations
         self.input_projection = nn.Linear(

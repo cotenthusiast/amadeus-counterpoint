@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -16,7 +17,7 @@ class GeometricAttentionBias(nn.Module):
         self.d1d2 = nn.Linear(64 * d1, d2)
         self.d2Hd3 = nn.Linear(d2, H * d3)
 
-        # shared geometric template transformation
+        # shared geometric template bank, shape [4096, d3]
         self.d34096 = d34096
 
         self.d2_norm = nn.LayerNorm(d2)
@@ -51,7 +52,7 @@ class GeometricAttentionBias(nn.Module):
         logits = logits.reshape(B, self.H, self.d3)  # B, H*d3 --> B, H, d3
 
         # transform each heads d3 coefficients into all 4096 square-pair biases
-        logits = self.d34096(logits)  # B, H, d3 --> B, H, 4096
+        logits = torch.einsum("bhi,oi->bho", logits, self.d34096)  # B, H, d3 --> B, H, 4096
 
         # reshape 4096 square pairs into a 64x64 attention bias matrix
         logits = logits.reshape(B, self.H, 64, 64)  # B, H, 4096 --> B, H, 64, 64
