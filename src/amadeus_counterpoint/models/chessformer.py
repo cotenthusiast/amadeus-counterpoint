@@ -23,7 +23,9 @@ class Chessformer(nn.Module):
         super().__init__()
 
         self.elo_low = nn.Embedding(1, elo_dim)
-        self.elo_high = nn.Embedding(1, elo_dim)        
+        self.elo_high = nn.Embedding(1, elo_dim)
+        nn.init.xavier_normal_(self.elo_low.weight)
+        nn.init.xavier_normal_(self.elo_high.weight)
 
         # shared GAB template bank, one set of weights across every block
         self.d34096 = nn.Parameter(torch.empty(4096, d3))
@@ -88,12 +90,16 @@ class Chessformer(nn.Module):
         # clamp into supported range
         elo = elo.clamp(0, 5000)
 
-        alpha = elo / 5000
+        # official endpoint weighting: weight_low grows with elo and
+        # multiplies elo_low, weight_high shrinks with elo and multiplies
+        # elo_high -- counterintuitive naming, reproduced exactly
+        weight_low = elo / 5000
+        weight_high = 1 - weight_low
 
         low = self.elo_low.weight[0]
         high = self.elo_high.weight[0]
 
         return (
-            (1 - alpha.unsqueeze(-1)) * low
-            + alpha.unsqueeze(-1) * high
+            weight_low.unsqueeze(-1) * low
+            + weight_high.unsqueeze(-1) * high
         )
