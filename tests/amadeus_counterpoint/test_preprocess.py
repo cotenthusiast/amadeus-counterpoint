@@ -111,6 +111,30 @@ def test_draw_result_is_kept():
     assert record["result"] == "1/2-1/2"
 
 
+def test_non_standard_variant_is_skipped():
+    # python-chess auto-selects a variant-specific board (e.g. Crazyhouse)
+    # from this header; dataset.py always replays with a standard Board(),
+    # so such games must never reach the training set.
+    headers = {**VALID_HEADERS, "Variant": "Crazyhouse"}
+    game = chess.pgn.read_game(io.StringIO(_game(headers)))
+
+    assert game_to_record(game) is None
+
+
+def test_explicit_standard_variant_header_is_kept():
+    headers = {**VALID_HEADERS, "Variant": "Standard"}
+    game = chess.pgn.read_game(io.StringIO(_game(headers)))
+
+    assert game_to_record(game) is not None
+
+
+def test_missing_variant_header_is_kept():
+    assert "Variant" not in VALID_HEADERS
+    game = chess.pgn.read_game(io.StringIO(_game(VALID_HEADERS)))
+
+    assert game_to_record(game) is not None
+
+
 def test_custom_fen_start_is_skipped():
     headers = {
         **VALID_HEADERS,

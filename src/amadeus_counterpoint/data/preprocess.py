@@ -109,6 +109,16 @@ def game_to_record(game: chess.pgn.Game) -> GameRecord | None:
     """
     headers = game.headers
 
+    # dataset.py replays games with a plain chess.Board() under standard
+    # rules. python-chess auto-detects the PGN "Variant" header and parses
+    # non-standard variants (Crazyhouse, Atomic, King of the Hill, ...) with
+    # their own move semantics -- e.g. Crazyhouse drop moves -- which are not
+    # valid standard-chess UCI and would corrupt (or crash) replay. Most
+    # variants still start from the normal board, so the FEN/SetUp check
+    # below does not catch them; only Chess960/"From Position" games do.
+    if headers.get("Variant", "Standard").strip().lower() != "standard":
+        return None
+
     # dataset.py replays games from chess.Board(), the standard starting
     # position, so games recorded from a custom position must be discarded.
     if "FEN" in headers or headers.get("SetUp") == "1":
