@@ -22,6 +22,13 @@ ELO_BIN_WIDTH = 100
 ELO_BIN_LOW = 600
 ELO_BIN_HIGH = 2600
 
+# Time-pressure cutoff, verified from the Chessformer paper (Sec. 4.1): "we
+# retain the first 10 moves but discard moves made under time pressure in
+# the same way [as the eval set]" -- i.e. remove positions that occur at or
+# after the first time the mover has fewer than 30 seconds left on their
+# clock. "Fewer than" is strict: exactly 30.0s does not trigger the cutoff.
+TIME_PRESSURE_THRESHOLD_SECONDS = 30.0
+
 
 class GameRecord(TypedDict):
     """Compact representation of one validated chess game."""
@@ -30,6 +37,7 @@ class GameRecord(TypedDict):
     black_elo: int
     result: str
     moves: list[str]
+    eligible_ply_count: int
 
 
 def iter_pgn_games(path: str | Path) -> Iterator[chess.pgn.Game]:
@@ -53,6 +61,38 @@ def iter_pgn_games(path: str | Path) -> Iterator[chess.pgn.Game]:
                 break
 
             yield game
+
+
+def eligible_ply_count(clocks_after_move: list[float | None]) -> int:
+    """Return how many leading plies survive the <30s time-pressure cutoff.
+
+    `clocks_after_move[i]` is the seconds left on the mover's clock right
+    after playing ply `i` (as reported by `[%clk ...]`), or None if no clock
+    annotation is present. Ply `i`'s own PRE-move clock is therefore the same
+    player's previous reading, `clocks_after_move[i - 2]` (two plies back,
+    since colors alternate); the first two plies of a game precede any
+    same-color reading and are always eligible.
+
+    Once a pre-move clock reading is found below the threshold, that ply and
+    every later ply in the game are excluded (matches the paper's "discard
+    moves made under time pressure" cutoff, not a scattered per-move filter).
+    Missing clock data is treated as no evidence of time pressure and never
+    triggers the cutoff -- the paper does not specify missing-clock handling,
+    so this is our deliberate, conservative choice.
+
+    Args:
+        clocks_after_move: Post-move clock readings in seconds, one per ply.
+
+    Returns:
+        The number of leading plies (0..eligible_ply_count - 1) eligible for
+        sampling as training positions.
+    """
+    for i in range(len(clocks_after_move)):
+        pre_move_clock = clocks_after_move[i - 2] if i >= 2 else None
+        if pre_move_clock is not None and pre_move_clock < TIME_PRESSURE_THRESHOLD_SECONDS:
+            return i
+
+    return len(clocks_after_move)
 
 
 def game_to_record(game: chess.pgn.Game) -> GameRecord | None:
@@ -85,16 +125,23 @@ def game_to_record(game: chess.pgn.Game) -> GameRecord | None:
         return None
 
     # Store moves as reusable UCI strings rather than a one-use move iterator.
-    moves = [move.uci() for move in game.mainline_moves()]
+    nodes = list(game.mainline())
+    moves = [node.move.uci() for node in nodes]
 
     if not moves:
         return None
+
+    # node.clock() is the mover's remaining time AFTER their move, so it is
+    # the pre-move clock reading for that same player's NEXT move (two plies
+    # later, since colors alternate).
+    clocks_after_move = [node.clock() for node in nodes]
 
     return {
         "white_elo": white_elo,
         "black_elo": black_elo,
         "result": result,
         "moves": moves,
+        "eligible_ply_count": eligible_ply_count(clocks_after_move),
     }
 
 

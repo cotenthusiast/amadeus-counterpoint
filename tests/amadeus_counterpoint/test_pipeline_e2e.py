@@ -95,6 +95,35 @@ def test_pgn_to_optimizer_step(tmp_path):
     assert any(not torch.equal(b, a) for b, a in zip(before, after))
 
 
+CLOCK_ANNOTATED_PGN = """\
+[Event "Test"]
+[White "A"]
+[Black "B"]
+[Result "1-0"]
+[WhiteElo "1500"]
+[BlackElo "1600"]
+
+1. e4 { [%clk 0:03:02] } e5 { [%clk 0:02:59] } 2. Nf3 { [%clk 0:00:25] } Nc6 { [%clk 0:02:50] } 3. Bb5 { [%clk 0:00:20] } a6 { [%clk 0:02:40] } 4. Ba4 { [%clk 0:00:15] } Nf6 { [%clk 0:02:30] } 1-0
+
+"""
+
+
+def test_low_clock_positions_are_excluded_end_to_end(tmp_path):
+    # White's clock drops to 25s right after Nf3 (ply 2), so White's *next*
+    # move (Bb5, ply 4) and everything after are under the paper's <30s
+    # time-pressure cutoff; only plies 0-3 (e4, e5, Nf3, Nc6) are eligible.
+    pgn_path = tmp_path / "games.pgn"
+    pgn_path.write_text(CLOCK_ANNOTATED_PGN, encoding="utf-8")
+
+    shard_dir = tmp_path / "shards"
+    preprocess_pgn(pgn_path, shard_dir, shard_size=10)
+
+    dataset = ChessDataset(shard_dir, shuffle_buffer_size=0)
+    examples = list(dataset)
+
+    assert len(examples) == 4  # the full eligible prefix, well under the 32 cap
+
+
 def test_full_dataloader_epoch_runs_through_training_loop(tmp_path):
     pgn_path = tmp_path / "games.pgn"
     pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")

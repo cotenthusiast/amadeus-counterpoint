@@ -21,16 +21,21 @@ from amadeus_counterpoint.encoding import (
 )
 
 
-def _legal_record(*ucis: str, white_elo=1500, black_elo=1900, result="1-0") -> dict:
+def _legal_record(
+    *ucis: str, white_elo=1500, black_elo=1900, result="1-0", eligible_ply_count=None,
+) -> dict:
     """Build a GameRecord, validating every move is legal by replaying it."""
     board = chess.Board()
     for uci in ucis:
         board.push_uci(uci)  # raises chess.IllegalMoveError if not legal
+    if eligible_ply_count is None:
+        eligible_ply_count = len(ucis)
     return {
         "white_elo": white_elo,
         "black_elo": black_elo,
         "result": result,
         "moves": list(ucis),
+        "eligible_ply_count": eligible_ply_count,
     }
 
 
@@ -177,6 +182,68 @@ def test_long_game_samples_exactly_the_cap_deterministically_under_fixed_seed():
     assert [e["policy_target"] for e in examples_a] == [e["policy_target"] for e in examples_b]
     # a different seed samples a different subset (overwhelmingly likely for 40 choose 32)
     assert [e["policy_target"] for e in examples_a] != [e["policy_target"] for e in examples_c]
+
+
+# --- eligible_ply_count: sampling stays within the time-pressure cutoff ----
+
+
+def test_excluded_plies_past_the_cutoff_are_never_yielded():
+    cycle = ["g1f3", "g8f6", "f3g1", "f6g8"]
+    moves = cycle * 5  # 20 plies
+    record = _legal_record(*moves, eligible_ply_count=6)
+
+    examples = list(iter_game_examples(record))
+
+    assert len(examples) == 6  # under the cap, so every eligible ply is used
+
+
+def test_max_positions_sampling_operates_over_eligible_plies_only():
+    cycle = ["g1f3", "g8f6", "f3g1", "f6g8"]
+    moves = cycle * 15  # 60 plies, but only the first 40 are eligible
+    record = _legal_record(*moves, eligible_ply_count=40)
+
+    # Spy on the rng actually used for sampling, to directly confirm the
+    # population sampled from is range(eligible_ply_count), not range(len(moves)).
+    rng = random.Random(1)
+    captured = {}
+    original_sample = rng.sample
+
+    def spy_sample(population, k):
+        captured["population"] = list(population)
+        captured["k"] = k
+        return original_sample(population, k)
+
+    rng.sample = spy_sample
+
+    examples = list(iter_game_examples(record, rng=rng))
+
+    assert captured["population"] == list(range(40))
+    assert captured["k"] == 32
+    assert len(examples) == 32  # capped, even though 40 plies are eligible
+
+
+def test_fewer_eligible_plies_than_cap_yields_all_of_them():
+    cycle = ["g1f3", "g8f6", "f3g1", "f6g8"]
+    moves = cycle * 15  # 60 plies, far more than the 32-position cap
+    record = _legal_record(*moves, eligible_ply_count=10)
+
+    examples = list(iter_game_examples(record))
+
+    assert len(examples) == 10
+
+
+def test_record_without_eligible_ply_count_field_treats_every_ply_as_eligible():
+    # Backward-compatible fallback for hand-built records missing the field.
+    record = {
+        "white_elo": 1500,
+        "black_elo": 1500,
+        "result": "1-0",
+        "moves": ["e2e4", "e7e5", "g1f3", "b8c6"],
+    }
+
+    examples = list(iter_game_examples(record))
+
+    assert len(examples) == 4
 
 
 def test_history_length_capped_at_eight():

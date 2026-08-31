@@ -62,13 +62,15 @@ def iter_game_examples(
     max_positions_per_game: int = DEFAULT_MAX_POSITIONS_PER_GAME,
     rng: random.Random | None = None,
 ) -> Iterator[TrainingExample]:
-    """Replay one game and yield an example for a sample of its human moves.
+    """Replay one game and yield an example for a sample of its eligible moves.
 
     Matches the Maia-3 recipe: up to `max_positions_per_game` positions are
-    sampled uniformly at random without replacement; every position is used
-    if the game has fewer plies than that. Every move is still replayed in
-    order regardless of sampling, so board history stays correct for the
-    positions that are yielded.
+    sampled uniformly at random without replacement from the game's eligible
+    plies (see `eligible_ply_count` in preprocess.py for the <30s
+    time-pressure cutoff); every eligible position is used if there are
+    fewer than that. Every move up to the eligible cutoff is still replayed
+    in order regardless of sampling, so board history stays correct for the
+    positions that are yielded; moves past the cutoff are never replayed.
 
     Each example contains the encoded board history, active-player and opponent
     Elo ratings, policy target, value target, and legal-move mask.
@@ -81,15 +83,22 @@ def iter_game_examples(
     result = record["result"]
     moves = record["moves"]
 
-    if len(moves) <= max_positions_per_game:
-        sampled_plies = set(range(len(moves)))
+    # Records without this field (e.g. hand-built fixtures) treat every ply
+    # as eligible, matching the pre-time-pressure-filter behavior.
+    num_eligible = min(record.get("eligible_ply_count", len(moves)), len(moves))
+
+    if num_eligible <= max_positions_per_game:
+        sampled_plies = set(range(num_eligible))
     else:
-        sampled_plies = set(rng.sample(range(len(moves)), max_positions_per_game))
+        sampled_plies = set(rng.sample(range(num_eligible), max_positions_per_game))
 
     board = chess.Board()
     history = [board.copy(stack=False)]
 
     for ply, move_uci in enumerate(moves):
+        if ply >= num_eligible:
+            break
+
         move = chess.Move.from_uci(move_uci)
 
         # All targets describe the position before the human move is played.

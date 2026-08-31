@@ -6,6 +6,7 @@ import pytest
 
 from amadeus_counterpoint.data.preprocess import (
     balance_by_elo,
+    eligible_ply_count,
     elo_bin,
     game_to_record,
     iter_pgn_games,
@@ -67,6 +68,7 @@ def test_valid_game_serializes_correctly():
         "black_elo": 1600,
         "result": "1-0",
         "moves": ["e2e4", "e7e5", "g1f3", "b8c6"],
+        "eligible_ply_count": 4,  # no [%clk] annotations: nothing excluded
     }
 
 
@@ -147,6 +149,79 @@ def test_uci_moves_are_lossless_for_castling_en_passant_and_promotion():
     assert board.piece_at(chess.F1) == chess.Piece(chess.ROOK, chess.WHITE)
 
 
+# --- eligible_ply_count: <30s time-pressure cutoff -------------------------
+
+
+def test_move_clearly_above_threshold_is_eligible():
+    # Pre-move clock for ply 2 comes from clocks_after_move[0].
+    assert eligible_ply_count([100.0, 100.0, 100.0]) == 3
+
+
+def test_move_clearly_below_threshold_excludes_it_and_the_rest():
+    # White's clock is 10s right before ply 2 (their previous reading is
+    # clocks_after_move[0] = 10.0) -> ply 2 and everything after is cut.
+    assert eligible_ply_count([10.0, 100.0, 100.0, 100.0]) == 2
+
+
+def test_exact_threshold_boundary_is_strict_less_than():
+    # "fewer than 30 seconds" is strict: exactly 30.0 does not trigger.
+    assert eligible_ply_count([30.0, 100.0, 100.0]) == 3
+    # anything below 30.0, however slightly, does.
+    assert eligible_ply_count([29.999, 100.0, 100.0]) == 2
+
+
+def test_first_two_plies_are_always_eligible_regardless_of_clock():
+    # No same-color prior reading exists yet for plies 0 and 1.
+    assert eligible_ply_count([]) == 0
+    assert eligible_ply_count([5.0]) == 1
+    assert eligible_ply_count([5.0, 5.0]) == 2
+
+
+def test_cutoff_does_not_recover_even_if_clock_later_rises():
+    # Once triggered, the cutoff is a hard truncation -- a later same-color
+    # reading back above the threshold does not re-admit later plies.
+    assert eligible_ply_count([10.0, 100.0, 100.0, 100.0, 100.0, 100.0]) == 2
+
+
+def test_missing_clock_data_never_triggers_the_cutoff():
+    # No evidence of time pressure -- our documented, conservative choice
+    # for missing-clock handling (unspecified by the paper).
+    assert eligible_ply_count([None, None, None, None]) == 4
+    assert eligible_ply_count([100.0, None, 100.0, None]) == 4
+
+
+def test_partial_missing_clock_does_not_block_a_later_real_cutoff():
+    # ply 2's pre-move clock is missing (no evidence, clocks_after_move[0]);
+    # ply 5's pre-move clock is real and low (clocks_after_move[3] = 10.0).
+    assert eligible_ply_count([None, 100.0, 100.0, 10.0, 100.0, 100.0]) == 5
+
+
+def test_game_to_record_clock_parsing_associates_correct_player_and_pre_move_position():
+    # White: 3:02 after e4, then only 0:25 left before Bb5 (pre-move clock
+    # for ply 4 = clocks_after_move[2] = 25s) -> Bb5 and beyond are cut,
+    # even though Nf3 itself (played with 3:02 still on the clock) is kept.
+    headers = {**VALID_HEADERS}
+    moves_pgn = (
+        "1. e4 { [%clk 0:03:02] } e5 { [%clk 0:02:59] } "
+        "2. Nf3 { [%clk 0:00:25] } Nc6 { [%clk 0:02:50] } "
+        "3. Bb5 { [%clk 0:00:20] } Nf6 { [%clk 0:02:40] } 1-0"
+    )
+    game = chess.pgn.read_game(io.StringIO(_game(headers, moves_pgn)))
+
+    record = game_to_record(game)
+
+    assert record["moves"] == ["e2e4", "e7e5", "g1f3", "b8c6", "f1b5", "g8f6"]
+    assert record["eligible_ply_count"] == 4
+
+
+def test_game_to_record_without_clk_annotations_is_fully_eligible():
+    game = chess.pgn.read_game(io.StringIO(_game(VALID_HEADERS)))
+
+    record = game_to_record(game)
+
+    assert record["eligible_ply_count"] == len(record["moves"])
+
+
 # --- iter_records --------------------------------------------------------
 
 
@@ -177,6 +252,31 @@ def test_write_shard_round_trip(tmp_path):
     records = [
         {"white_elo": 1500, "black_elo": 1600, "result": "1-0", "moves": ["e2e4", "e7e5"]},
         {"white_elo": 1200, "black_elo": 1900, "result": "0-1", "moves": ["d2d4"]},
+    ]
+    path = tmp_path / "shard.parquet"
+
+    write_shard(records, path)
+    table = pq.read_table(path)
+
+    assert table.to_pylist() == records
+
+
+def test_write_shard_round_trip_preserves_eligible_ply_count(tmp_path):
+    records = [
+        {
+            "white_elo": 1500,
+            "black_elo": 1600,
+            "result": "1-0",
+            "moves": ["e2e4", "e7e5", "g1f3", "b8c6"],
+            "eligible_ply_count": 2,
+        },
+        {
+            "white_elo": 1200,
+            "black_elo": 1900,
+            "result": "0-1",
+            "moves": ["d2d4"],
+            "eligible_ply_count": 1,
+        },
     ]
     path = tmp_path / "shard.parquet"
 
