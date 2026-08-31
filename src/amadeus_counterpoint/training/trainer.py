@@ -14,27 +14,34 @@ AMP_GROWTH_INTERVAL = 2000
 AMP_BACKOFF_FACTOR = 0.5
 
 
-def save_checkpoint(path, model, optimizer, scheduler, global_step: int) -> None:
-    """Save model/optimizer/scheduler state and the optimizer step count."""
+def save_checkpoint(path, model, optimizer, scheduler, global_step: int, scaler=None) -> None:
+    """Save model/optimizer/scheduler/scaler state and the optimizer step count."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(
-        {
-            "model": model.state_dict(),
-            "optimizer": optimizer.state_dict(),
-            "scheduler": scheduler.state_dict(),
-            "global_step": global_step,
-        },
-        path,
-    )
+    payload = {
+        "model": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "scheduler": scheduler.state_dict(),
+        "global_step": global_step,
+    }
+    if scaler is not None:
+        payload["scaler"] = scaler.state_dict()
+    torch.save(payload, path)
 
 
-def load_checkpoint(path, model, optimizer, scheduler, device) -> int:
-    """Load model/optimizer/scheduler state and return the saved global step."""
+def load_checkpoint(path, model, optimizer, scheduler, device, scaler=None) -> int:
+    """Load model/optimizer/scheduler/scaler state and return the saved global step.
+
+    AMP's GradScaler tracks a growth-adjusted loss scale across steps; without
+    restoring it, resuming would silently reset the scale to its initial
+    value instead of the one training had converged to.
+    """
     checkpoint = torch.load(path, map_location=device)
     model.load_state_dict(checkpoint["model"])
     optimizer.load_state_dict(checkpoint["optimizer"])
     scheduler.load_state_dict(checkpoint["scheduler"])
+    if scaler is not None and "scaler" in checkpoint:
+        scaler.load_state_dict(checkpoint["scaler"])
     return checkpoint["global_step"]
 
 
@@ -53,13 +60,15 @@ def train(
     checkpoint_every: int = 1000,
     start_step: int = 0,
     use_amp: bool = False,
+    scaler=None,
 ) -> int:
     """Train Chessformer for a fixed number of optimizer updates.
 
-    Checkpoints (model/optimizer/scheduler/global_step) are written every
-    `checkpoint_every` OPTIMIZER steps to `checkpoint_dir`, if given. Returns
-    the final global step, so training can be resumed by passing that value
-    back in as `start_step` together with `load_checkpoint`.
+    Checkpoints (model/optimizer/scheduler/scaler/global_step) are written
+    every `checkpoint_every` OPTIMIZER steps to `checkpoint_dir`, if given.
+    Returns the final global step, so training can be resumed by passing that
+    value back in as `start_step`, together with a `scaler` whose state was
+    restored via `load_checkpoint`.
     """
 
     model.train()
@@ -68,14 +77,15 @@ def train(
     # AMP is only meaningful on CUDA; the scaler and autocast below are
     # no-ops everywhere else, so the training loop needs no separate CPU path.
     use_amp = use_amp and device.type == "cuda"
-    scaler = torch.amp.GradScaler(
-        device=device.type,
-        enabled=use_amp,
-        init_scale=AMP_INIT_SCALE,
-        growth_factor=AMP_GROWTH_FACTOR,
-        backoff_factor=AMP_BACKOFF_FACTOR,
-        growth_interval=AMP_GROWTH_INTERVAL,
-    )
+    if scaler is None:
+        scaler = torch.amp.GradScaler(
+            device=device.type,
+            enabled=use_amp,
+            init_scale=AMP_INIT_SCALE,
+            growth_factor=AMP_GROWTH_FACTOR,
+            backoff_factor=AMP_BACKOFF_FACTOR,
+            growth_interval=AMP_GROWTH_INTERVAL,
+        )
 
     global_step = start_step
     accumulation_counter = 0
@@ -161,6 +171,7 @@ def train(
                     optimizer,
                     scheduler,
                     global_step,
+                    scaler=scaler,
                 )
 
             if global_step == num_steps:

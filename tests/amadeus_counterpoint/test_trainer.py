@@ -198,7 +198,7 @@ def test_checkpoint_contains_model_optimizer_scheduler_and_step(tmp_path):
     )
 
     checkpoint = torch.load(tmp_path / "step_00000001.pt", map_location=DEVICE)
-    assert set(checkpoint) == {"model", "optimizer", "scheduler", "global_step"}
+    assert set(checkpoint) == {"model", "optimizer", "scheduler", "global_step", "scaler"}
     assert checkpoint["global_step"] == 1
     assert set(checkpoint["model"]) == set(model.state_dict())
 
@@ -211,6 +211,41 @@ def test_save_checkpoint_creates_missing_directories(tmp_path):
     save_checkpoint(nested, model, optimizer, scheduler, global_step=1)
 
     assert nested.exists()
+
+
+def test_checkpoint_round_trips_amp_scaler_state(tmp_path):
+    model = _build_model()
+    optimizer, scheduler = _build_optimizer_and_scheduler(model)
+
+    scaler = torch.amp.GradScaler(device="cpu", enabled=True, init_scale=123.0)
+    # Simulate a scaler that has grown/backed off partway through training,
+    # rather than sitting at its freshly-constructed init_scale.
+    scaler.load_state_dict(
+        {"scale": 512.0, "growth_factor": 2.0, "backoff_factor": 0.5,
+         "growth_interval": 2000, "_growth_tracker": 7}
+    )
+
+    save_checkpoint(tmp_path / "ckpt.pt", model, optimizer, scheduler, global_step=1, scaler=scaler)
+
+    resumed_scaler = torch.amp.GradScaler(device="cpu", enabled=True, init_scale=999.0)
+    load_checkpoint(
+        tmp_path / "ckpt.pt", model, optimizer, scheduler, DEVICE, scaler=resumed_scaler,
+    )
+
+    assert resumed_scaler.state_dict() == scaler.state_dict()
+
+
+def test_load_checkpoint_without_scaler_arg_ignores_missing_scaler_state(tmp_path):
+    # save_checkpoint(scaler=None) (the default) must not fail load_checkpoint
+    # for callers who don't care about AMP state.
+    model = _build_model()
+    optimizer, scheduler = _build_optimizer_and_scheduler(model)
+
+    save_checkpoint(tmp_path / "ckpt.pt", model, optimizer, scheduler, global_step=1)
+
+    restored_step = load_checkpoint(tmp_path / "ckpt.pt", model, optimizer, scheduler, DEVICE)
+
+    assert restored_step == 1
 
 
 def test_resume_from_checkpoint_restores_state_exactly(tmp_path):
