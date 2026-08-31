@@ -60,7 +60,9 @@ def test_examples_match_independent_recomputation_including_castling():
     ]
     record = _legal_record(*moves, white_elo=1500, black_elo=1900, result="1-0")
 
-    examples = list(iter_game_examples(record))
+    # history_mask_prob=0: this test cross-checks encode_history(history)
+    # against the unmasked recomputation below, so augmentation must be off.
+    examples = list(iter_game_examples(record, history_mask_prob=0.0))
     assert len(examples) == len(moves)
 
     board = chess.Board()
