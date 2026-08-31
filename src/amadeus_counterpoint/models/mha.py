@@ -33,7 +33,7 @@ class MultiHeadAttention(nn.Module):
         )
 
         # recombine information from all attention heads
-        self.proj = nn.Linear(d_model, d_model)
+        self.proj = nn.Linear(d_model, d_model, bias=False)
 
         # dropout applied to attention weights after softmax
         self.dropout = nn.Dropout(dropout)
