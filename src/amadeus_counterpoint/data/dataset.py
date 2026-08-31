@@ -56,10 +56,33 @@ def result_to_value_target(result: str, turn: chess.Color) -> int:
 
 DEFAULT_MAX_POSITIONS_PER_GAME = 32
 
+# Chessformer Appendix E: with probability 5%, training examples have a
+# uniformly random amount of history masked out, keeping low/no-history
+# positions in-distribution. The 5% trigger probability and "uniformly
+# random amount of history" are published; the exact original RNG sampling
+# implementation is not, so `_mask_history` below is a documented,
+# defensible reconstruction rather than a source-exact reproduction.
+DEFAULT_HISTORY_MASK_PROB = 0.05
+
+
+def _mask_history(
+    history: list[chess.Board], rng: random.Random
+) -> list[chess.Board]:
+    """Randomly drop older boards, always keeping the current board.
+
+    Uniformly chooses how many of the previous boards (0..available) to
+    retain, keeping the most recent ones. The current board (`history[-1]`)
+    is never dropped.
+    """
+    available_previous = len(history) - 1
+    keep_previous = rng.randint(0, available_previous)
+    return history[-(keep_previous + 1):]
+
 
 def iter_game_examples(
     record: GameRecord,
     max_positions_per_game: int = DEFAULT_MAX_POSITIONS_PER_GAME,
+    history_mask_prob: float = DEFAULT_HISTORY_MASK_PROB,
     rng: random.Random | None = None,
 ) -> Iterator[TrainingExample]:
     """Replay one game and yield an example for a sample of its eligible moves.
@@ -71,6 +94,11 @@ def iter_game_examples(
     fewer than that. Every move up to the eligible cutoff is still replayed
     in order regardless of sampling, so board history stays correct for the
     positions that are yielded; moves past the cutoff are never replayed.
+
+    Following Chessformer Appendix E, with probability `history_mask_prob`
+    each yielded example has its history randomly shortened before encoding
+    (see `_mask_history`); this training-time augmentation is applied here,
+    not in `encode_history`, which stays deterministic for eval/inference use.
 
     Each example contains the encoded board history, active-player and opponent
     Elo ratings, policy target, value target, and legal-move mask.
@@ -110,8 +138,12 @@ def iter_game_examples(
             opponent_elo = white_elo
 
         if ply in sampled_plies:
+            example_history = history
+            if rng.random() < history_mask_prob:
+                example_history = _mask_history(history, rng)
+
             yield {
-                "x": encode_history(history),
+                "x": encode_history(example_history),
                 "player_elo": player_elo,
                 "opponent_elo": opponent_elo,
                 "policy_target": move_to_policy_index(move, board),

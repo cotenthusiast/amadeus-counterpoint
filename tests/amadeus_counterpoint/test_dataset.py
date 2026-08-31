@@ -256,6 +256,149 @@ def test_history_length_capped_at_eight():
         assert ex["x"].shape == (64, 12 * HISTORY_LENGTH)
 
 
+# --- iter_game_examples: 5% random history masking (Chessformer App. E) ----
+
+
+class _FixedMaskRng:
+    """Stand-in exposing only the random.Random calls history masking uses.
+
+    `trigger` controls whether `rng.random() < history_mask_prob` fires;
+    `keep_previous` controls how many previous boards `rng.randint(0, n)`
+    reports as retained (clamped into range, like the real randint).
+    """
+
+    def __init__(self, trigger: bool, keep_previous: int = 0):
+        self._trigger = trigger
+        self._keep_previous = keep_previous
+
+    def random(self):
+        return 0.0 if self._trigger else 1.0
+
+    def randint(self, a, b):
+        return max(a, min(self._keep_previous, b))
+
+
+_MASK_TEST_MOVES = ["e2e4", "e7e5", "g1f3", "b8c6", "f1b5"]
+
+
+def _boards_after(moves):
+    board = chess.Board()
+    boards = [board.copy(stack=False)]
+    for uci in moves:
+        board.push_uci(uci)
+        boards.append(board.copy(stack=False))
+    return boards
+
+
+def test_history_masking_skipped_when_augmentation_does_not_trigger():
+    record = _legal_record(*_MASK_TEST_MOVES)
+    boards = _boards_after(_MASK_TEST_MOVES)  # P0..P5, last ply's history is P0..P4
+
+    examples = list(
+        iter_game_examples(record, rng=_FixedMaskRng(trigger=False, keep_previous=0))
+    )
+
+    assert torch.equal(examples[-1]["x"], encode_history(boards[:5]))
+
+
+def test_history_masking_keeps_current_board_regardless_of_retained_count():
+    record = _legal_record(*_MASK_TEST_MOVES)
+    boards = _boards_after(_MASK_TEST_MOVES)
+    current_board_encoding = encode_history([boards[4]])[:, -12:]
+
+    for keep_previous in range(5):
+        examples = list(
+            iter_game_examples(
+                record, rng=_FixedMaskRng(trigger=True, keep_previous=keep_previous)
+            )
+        )
+        assert torch.equal(examples[-1]["x"][:, -12:], current_board_encoding)
+
+
+def test_history_masking_retains_most_recent_previous_boards():
+    record = _legal_record(*_MASK_TEST_MOVES)
+    boards = _boards_after(_MASK_TEST_MOVES)
+
+    examples = list(
+        iter_game_examples(record, rng=_FixedMaskRng(trigger=True, keep_previous=2))
+    )
+
+    # ply 4's history is P0..P4; keeping 2 previous boards keeps P2, P3, P4.
+    assert torch.equal(examples[-1]["x"], encode_history(boards[2:5]))
+
+
+def test_history_masking_zero_retained_uses_only_current_board():
+    record = _legal_record(*_MASK_TEST_MOVES)
+    boards = _boards_after(_MASK_TEST_MOVES)
+
+    examples = list(
+        iter_game_examples(record, rng=_FixedMaskRng(trigger=True, keep_previous=0))
+    )
+
+    assert torch.equal(examples[-1]["x"], encode_history([boards[4]]))
+
+
+def test_history_masking_retaining_all_available_matches_unmasked_history():
+    record = _legal_record(*_MASK_TEST_MOVES)
+    boards = _boards_after(_MASK_TEST_MOVES)
+
+    examples = list(
+        iter_game_examples(record, rng=_FixedMaskRng(trigger=True, keep_previous=4))
+    )
+
+    assert torch.equal(examples[-1]["x"], encode_history(boards[:5]))
+
+
+def test_history_masking_still_pads_from_earliest_retained_board():
+    record = _legal_record(*_MASK_TEST_MOVES)
+    boards = _boards_after(_MASK_TEST_MOVES)
+
+    examples = list(
+        iter_game_examples(record, rng=_FixedMaskRng(trigger=True, keep_previous=1))
+    )
+
+    # ply 4's history is P0..P4; keeping 1 previous board keeps P3, P4, then
+    # existing padding prepends copies of P3 (not the original game start P0).
+    assert torch.equal(examples[-1]["x"], encode_history(boards[3:5]))
+
+
+def test_history_masking_is_deterministic_under_fixed_rng_seed():
+    cycle = ["g1f3", "g8f6", "f3g1", "f6g8"]
+    moves = cycle * 5  # 20 plies, well under the sampling cap
+    record = _legal_record(*moves)
+
+    examples_a = list(
+        iter_game_examples(record, history_mask_prob=1.0, rng=random.Random(123))
+    )
+    examples_b = list(
+        iter_game_examples(record, history_mask_prob=1.0, rng=random.Random(123))
+    )
+    examples_c = list(
+        iter_game_examples(record, history_mask_prob=1.0, rng=random.Random(456))
+    )
+
+    xs_a = [e["x"] for e in examples_a]
+    xs_b = [e["x"] for e in examples_b]
+    xs_c = [e["x"] for e in examples_c]
+
+    assert all(torch.equal(a, b) for a, b in zip(xs_a, xs_b))
+    assert any(not torch.equal(a, c) for a, c in zip(xs_a, xs_c))
+
+
+def test_encode_history_stays_deterministic_and_unaffected_by_global_rng_state():
+    # encode_history() is the deterministic encoder also used for eval/inference;
+    # history masking must live in iter_game_examples, not leak in here.
+    boards = _boards_after(_MASK_TEST_MOVES)
+
+    random.seed(0)
+    first = encode_history(boards)
+    random.random()  # perturb any accidentally-shared global RNG state
+    random.random()
+    second = encode_history(boards)
+
+    assert torch.equal(first, second)
+
+
 # --- iter_shard_records -------------------------------------------------
 
 
