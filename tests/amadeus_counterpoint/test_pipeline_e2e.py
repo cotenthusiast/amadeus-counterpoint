@@ -63,7 +63,7 @@ def test_pgn_to_optimizer_step(tmp_path):
     pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
 
     shard_dir = tmp_path / "shards"
-    preprocess_pgn(pgn_path, shard_dir, shard_size=10)
+    preprocess_pgn(pgn_path, shard_dir, shard_size=10, allow_missing_target_exclusion=True)
     assert list(shard_dir.glob("*.parquet"))
 
     dataset = ChessDataset(shard_dir, shuffle_buffer_size=8)
@@ -116,7 +116,7 @@ def test_low_clock_positions_are_excluded_end_to_end(tmp_path):
     pgn_path.write_text(CLOCK_ANNOTATED_PGN, encoding="utf-8")
 
     shard_dir = tmp_path / "shards"
-    preprocess_pgn(pgn_path, shard_dir, shard_size=10)
+    preprocess_pgn(pgn_path, shard_dir, shard_size=10, allow_missing_target_exclusion=True)
 
     dataset = ChessDataset(shard_dir, shuffle_buffer_size=0)
     examples = list(dataset)
@@ -129,7 +129,7 @@ def test_full_dataloader_epoch_runs_through_training_loop(tmp_path):
     pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
 
     shard_dir = tmp_path / "shards"
-    preprocess_pgn(pgn_path, shard_dir, shard_size=10)
+    preprocess_pgn(pgn_path, shard_dir, shard_size=10, allow_missing_target_exclusion=True)
 
     dataset = ChessDataset(shard_dir, shuffle_buffer_size=8)
     dataloader = DataLoader(dataset, batch_size=2, num_workers=0)

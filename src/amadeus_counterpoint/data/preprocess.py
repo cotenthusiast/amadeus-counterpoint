@@ -6,6 +6,7 @@ compressed Parquet shards.
 """
 
 import itertools
+import warnings
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import TypedDict
@@ -13,6 +14,11 @@ from typing import TypedDict
 import chess.pgn
 import pyarrow as pa
 import pyarrow.parquet as pq
+
+from amadeus_counterpoint.data.target_exclusion import (
+    TargetExclusionRequiredError,
+    is_target_game,
+)
 
 # Elo-bin balancing, verified verbatim from the Chessformer paper (Sec. 7):
 # 22 bins -- one for mean Elo < 600, twenty 100-point bins spanning
@@ -155,16 +161,38 @@ def game_to_record(game: chess.pgn.Game) -> GameRecord | None:
     }
 
 
-def iter_records(path: str | Path) -> Iterator[GameRecord]:
-    """Yield only valid compact game records from a PGN file.
+def iter_records(
+    path: str | Path,
+    target_aliases: frozenset[str] | None = None,
+    stats: dict[str, int] | None = None,
+) -> Iterator[GameRecord]:
+    """Yield only valid, non-target-excluded compact game records from a PGN file.
 
     Args:
         path: Path to the input PGN file.
+        target_aliases: Normalized target-cohort Lichess usernames (see
+            `target_exclusion.load_target_aliases`). A game is rejected if
+            either player matches. `None` or empty applies no filtering.
+        stats: If given, `stats["target_excluded_games"]` is created (at 0)
+            and incremented whenever `target_aliases` is non-empty, so
+            callers can distinguish "exclusion applied, zero matches" from
+            "exclusion not applied at all" (the key is simply absent).
 
     Yields:
-        Valid game records suitable for writing to training shards.
+        Valid, non-target-excluded game records suitable for writing to
+        training shards.
     """
+    if target_aliases and stats is not None:
+        stats.setdefault("target_excluded_games", 0)
+
     for game in iter_pgn_games(path):
+        if target_aliases and is_target_game(
+            game.headers.get("White", ""), game.headers.get("Black", ""), target_aliases
+        ):
+            if stats is not None:
+                stats["target_excluded_games"] += 1
+            continue
+
         record = game_to_record(game)
 
         if record is None:
@@ -251,12 +279,15 @@ def preprocess_pgn(
     shard_size: int = 10_000, # TODO hyperparameter
     elo_chunk_size: int = 20_000,
     games_per_elo_bin: int = 10,
+    target_aliases: frozenset[str] | None = None,
+    allow_missing_target_exclusion: bool = False,
+    stats: dict[str, int] | None = None,
 ) -> None:
     """Preprocess a PGN file into compressed Parquet shards.
 
-    Games are streamed from disk, validated, resampled for Elo-bin balance
-    (see `balance_by_elo`), buffered up to ``shard_size``, and then written
-    to sequentially numbered shard files.
+    Games are streamed from disk, validated, target-excluded, resampled for
+    Elo-bin balance (see `balance_by_elo`), buffered up to ``shard_size``,
+    and then written to sequentially numbered shard files.
 
     Args:
         input_path: Path to the source PGN file.
@@ -264,12 +295,46 @@ def preprocess_pgn(
         shard_size: Maximum number of games stored in each shard.
         elo_chunk_size: Games per Elo-balancing chunk (see `balance_by_elo`).
         games_per_elo_bin: Games kept per Elo bin within one chunk.
+        target_aliases: Normalized target-cohort Lichess usernames (see
+            `target_exclusion.load_target_aliases`). Required unless
+            `allow_missing_target_exclusion` is set.
+        allow_missing_target_exclusion: Deliberate opt-in to run WITHOUT
+            target-cohort exclusion (e.g. `target_aliases` not yet
+            populated). Emits a warning; the output is PILOT-ONLY and NOT
+            VALID FOR FINAL POPULATION TRAINING.
+        stats: If given, `stats["target_exclusion_applied"]` records whether
+            exclusion ran, and (only when it did) `stats["target_excluded_games"]`
+            counts the games it rejected.
 
     Raises:
         ValueError: If shard_size is not positive.
+        TargetExclusionRequiredError: If `target_aliases` is empty/missing
+            and `allow_missing_target_exclusion` was not explicitly set.
     """
     if shard_size <= 0:
         raise ValueError("shard_size must be greater than 0")
+
+    if not target_aliases:
+        if not allow_missing_target_exclusion:
+            raise TargetExclusionRequiredError(
+                "No target-cohort aliases are configured (see "
+                "configs/target_aliases.json). Population training must "
+                "exclude the target cohort's Lichess accounts. Pass "
+                "allow_missing_target_exclusion=True only for a "
+                "non-production pilot run -- the resulting data is "
+                "PILOT-ONLY and NOT VALID FOR FINAL POPULATION TRAINING."
+            )
+        warnings.warn(
+            "PILOT-ONLY: target-cohort exclusion is not configured, so no "
+            "target-cohort games are being filtered. This preprocessing "
+            "run and its output are NOT VALID FOR FINAL POPULATION "
+            "TRAINING.",
+            stacklevel=2,
+        )
+        if stats is not None:
+            stats["target_exclusion_applied"] = False
+    elif stats is not None:
+        stats["target_exclusion_applied"] = True
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -278,7 +343,7 @@ def preprocess_pgn(
     shard_index = 0
 
     balanced_records = balance_by_elo(
-        iter_records(input_path),
+        iter_records(input_path, target_aliases=target_aliases, stats=stats),
         chunk_size=elo_chunk_size,
         games_per_bin=games_per_elo_bin,
     )

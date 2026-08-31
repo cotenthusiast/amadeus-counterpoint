@@ -1,0 +1,13 @@
+{
+  "_provenance": "Population-training target-exclusion cohort. 'lichess_usernames' must be verified actual Lichess account names for each player -- the 'canonical_name' field is the real-world player name for documentation only and is NEVER matched directly. Do not populate 'lichess_usernames' with guessed or unverified values.",
+  "targets": [
+    {"canonical_name": "Magnus Carlsen", "lichess_usernames": []},
+    {"canonical_name": "Wesley So", "lichess_usernames": []},
+    {"canonical_name": "Levon Aronian", "lichess_usernames": []},
+    {"canonical_name": "Fabiano Caruana", "lichess_usernames": []},
+    {"canonical_name": "Maxime Vachier-Lagrave", "lichess_usernames": []},
+    {"canonical_name": "Hikaru Nakamura", "lichess_usernames": []},
+    {"canonical_name": "Ian Nepomniachtchi", "lichess_usernames": []},
+    {"canonical_name": "Alireza Firouzja", "lichess_usernames": []}
+  ]
+}

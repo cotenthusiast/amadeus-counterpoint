@@ -14,6 +14,7 @@ from amadeus_counterpoint.data.preprocess import (
     preprocess_pgn,
     write_shard,
 )
+from amadeus_counterpoint.data.target_exclusion import TargetExclusionRequiredError
 
 
 def _game(headers: dict, moves: str = "1. e4 e5 2. Nf3 Nc6") -> str:
@@ -324,7 +325,7 @@ def test_exact_multiple_shard_size_produces_no_partial_shard(tmp_path):
     path = _write_pgn(tmp_path, [_game(VALID_HEADERS) for _ in range(4)])
     out_dir = tmp_path / "out"
 
-    preprocess_pgn(path, out_dir, shard_size=2)
+    preprocess_pgn(path, out_dir, shard_size=2, allow_missing_target_exclusion=True)
 
     shards = sorted(out_dir.glob("*.parquet"))
     assert [s.name for s in shards] == ["shard_00000.parquet", "shard_00001.parquet"]
@@ -336,7 +337,7 @@ def test_final_partial_shard_is_written(tmp_path):
     path = _write_pgn(tmp_path, [_game(VALID_HEADERS) for _ in range(5)])
     out_dir = tmp_path / "out"
 
-    preprocess_pgn(path, out_dir, shard_size=2)
+    preprocess_pgn(path, out_dir, shard_size=2, allow_missing_target_exclusion=True)
 
     shards = sorted(out_dir.glob("*.parquet"))
     assert [s.name for s in shards] == [
@@ -453,8 +454,67 @@ def test_all_games_invalid_produces_no_shards(tmp_path):
     path = _write_pgn(tmp_path, [_game(bad_headers)])
     out_dir = tmp_path / "out"
 
-    preprocess_pgn(path, out_dir, shard_size=10)
+    preprocess_pgn(path, out_dir, shard_size=10, allow_missing_target_exclusion=True)
 
     assert list(out_dir.glob("*.parquet")) == []
     # output_dir is still created even when nothing is written to it
     assert out_dir.is_dir()
+
+
+# --- target exclusion --------------------------------------------------------
+
+
+def test_preprocess_pgn_raises_when_target_exclusion_not_configured(tmp_path):
+    path = _write_pgn(tmp_path, [_game(VALID_HEADERS)])
+
+    with pytest.raises(TargetExclusionRequiredError):
+        preprocess_pgn(path, tmp_path / "out", shard_size=10)
+
+
+def test_preprocess_pgn_pilot_mode_warns_and_proceeds_without_aliases(tmp_path):
+    path = _write_pgn(tmp_path, [_game(VALID_HEADERS)])
+    out_dir = tmp_path / "out"
+
+    with pytest.warns(UserWarning, match="PILOT-ONLY"):
+        preprocess_pgn(path, out_dir, shard_size=10, allow_missing_target_exclusion=True)
+
+    assert list(out_dir.glob("*.parquet"))
+
+
+def test_preprocess_pgn_pilot_mode_reports_exclusion_as_not_applied_not_zero(tmp_path):
+    path = _write_pgn(tmp_path, [_game(VALID_HEADERS)])
+    stats = {}
+
+    with pytest.warns(UserWarning):
+        preprocess_pgn(
+            path,
+            tmp_path / "out",
+            shard_size=10,
+            allow_missing_target_exclusion=True,
+            stats=stats,
+        )
+
+    assert stats["target_exclusion_applied"] is False
+    # A missing key (not 0) distinguishes "not applied" from "applied, 0 matches".
+    assert "target_excluded_games" not in stats
+
+
+def test_preprocess_pgn_excludes_target_games_and_counts_them(tmp_path):
+    target_headers = {**VALID_HEADERS, "White": "TargetPlayer"}
+    other_headers = {**VALID_HEADERS, "White": "Someone"}
+    path = _write_pgn(tmp_path, [_game(target_headers), _game(other_headers)])
+    out_dir = tmp_path / "out"
+    stats = {}
+
+    preprocess_pgn(
+        path,
+        out_dir,
+        shard_size=10,
+        target_aliases=frozenset({"targetplayer"}),
+        stats=stats,
+    )
+
+    kept = sum(len(pq.read_table(p)) for p in out_dir.glob("*.parquet"))
+    assert kept == 1
+    assert stats["target_exclusion_applied"] is True
+    assert stats["target_excluded_games"] == 1
