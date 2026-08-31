@@ -23,7 +23,7 @@ htmlcov/
 .ipynb_checkpoints/
 
 # Research data and datasets
-data/
+/data/
 datasets/
 raw_data/
 processed_data/
