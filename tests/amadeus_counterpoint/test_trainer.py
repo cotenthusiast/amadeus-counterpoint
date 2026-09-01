@@ -95,6 +95,43 @@ def test_accumulation_steps_causes_one_update_per_n_microbatches():
     assert len(scheduler_calls) == 3
 
 
+def test_gradient_accumulation_split_is_equivalent_to_one_big_microbatch():
+    """Splitting one fixed effective batch into more/fewer microbatches
+    (with accumulation_steps adjusted to match) must produce the same
+    parameter update either way.
+
+    This is the numerical guarantee behind safely trading physical batch
+    size for gradient-accumulation steps at a fixed effective batch: since
+    chessformer_loss uses mean reduction and trainer.py divides by
+    accumulation_steps before backward, the mean of N equal-size
+    microbatch means equals the true effective-batch mean exactly (up to
+    floating-point summation order), for any equal split of the same data.
+    """
+    torch.manual_seed(2)
+    big_batch = _make_batch(batch_size=8)
+
+    def run(accumulation_steps, microbatch_size):
+        model = _build_model()
+        optimizer, scheduler = _build_optimizer_and_scheduler(model)
+        microbatches = [
+            {k: v[i : i + microbatch_size] for k, v in big_batch.items()}
+            for i in range(0, 8, microbatch_size)
+        ]
+        train(
+            model, microbatches, optimizer, scheduler, DEVICE,
+            num_steps=1, accumulation_steps=accumulation_steps, log_every=1000,
+        )
+        return list(model.parameters())
+
+    params_single = run(accumulation_steps=1, microbatch_size=8)
+    params_split_2 = run(accumulation_steps=2, microbatch_size=4)
+    params_split_4 = run(accumulation_steps=4, microbatch_size=2)
+
+    for p_single, p2, p4 in zip(params_single, params_split_2, params_split_4):
+        assert torch.allclose(p_single, p2, atol=1e-5, rtol=1e-4)
+        assert torch.allclose(p_single, p4, atol=1e-5, rtol=1e-4)
+
+
 def test_clip_grad_norm_executes_once_per_optimizer_update(monkeypatch):
     model = _build_model()
     optimizer, scheduler = _build_optimizer_and_scheduler(model)
