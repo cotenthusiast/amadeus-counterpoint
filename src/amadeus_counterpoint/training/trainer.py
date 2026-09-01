@@ -96,13 +96,15 @@ def train(
     running_batches = 0
 
     for batch in dataloader:
-        # Move the batch from CPU memory to the training device.
-        x = batch["x"].to(device)
-        player_elo = batch["player_elo"].to(device)
-        opponent_elo = batch["opponent_elo"].to(device)
-        policy_target = batch["policy_target"].to(device)
-        value_target = batch["value_target"].to(device)
-        legal_mask = batch["legal_mask"].to(device)
+        # Move the batch from CPU memory to the training device. non_blocking
+        # only has an effect for pinned-memory CPU tensors on a CUDA device;
+        # it is a safe no-op (falls back to a blocking copy) otherwise.
+        x = batch["x"].to(device, non_blocking=True)
+        player_elo = batch["player_elo"].to(device, non_blocking=True)
+        opponent_elo = batch["opponent_elo"].to(device, non_blocking=True)
+        policy_target = batch["policy_target"].to(device, non_blocking=True)
+        value_target = batch["value_target"].to(device, non_blocking=True)
+        legal_mask = batch["legal_mask"].to(device, non_blocking=True)
 
         # Forward pass and loss.
         with torch.autocast(device_type=device.type, enabled=use_amp):
