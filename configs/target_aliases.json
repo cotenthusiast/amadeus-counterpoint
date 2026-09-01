@@ -1,13 +1,48 @@
 {
-  "_provenance": "Population-training target-exclusion cohort. 'lichess_usernames' must be verified actual Lichess account names for each player -- the 'canonical_name' field is the real-world player name for documentation only and is NEVER matched directly. Do not populate 'lichess_usernames' with guessed or unverified values.",
+  "_provenance": "Population-training target-exclusion cohort. Two evidence tiers, both excluded IDENTICALLY: 'verified_usernames' (strong platform-level or first-party-style evidence, e.g. Lichess API verified=true, self-authored bio linking the player's own social media, or long-standing consistent public/journalistic identification) and 'conservative_candidate_usernames' (plausible but circumstantial -- kept and excluded anyway, since a missed target alias contaminates the corpus while an over-cautious exclusion only removes a negligible number of unrelated games). 'canonical_name' is a real-world provenance label only and is NEVER matched directly. Full evidence/source notes for each entry are recorded in project session history, not duplicated here. Compiled 2026-09-02 against Option D archives (2017-06, 2018-06, 2019-06, 2020-06, 2021-06); usernames with zero appearances there may still matter for other corpora and are kept for that reason.",
   "targets": [
-    {"canonical_name": "Magnus Carlsen", "lichess_usernames": []},
-    {"canonical_name": "Wesley So", "lichess_usernames": []},
-    {"canonical_name": "Levon Aronian", "lichess_usernames": []},
-    {"canonical_name": "Fabiano Caruana", "lichess_usernames": []},
-    {"canonical_name": "Maxime Vachier-Lagrave", "lichess_usernames": []},
-    {"canonical_name": "Hikaru Nakamura", "lichess_usernames": []},
-    {"canonical_name": "Ian Nepomniachtchi", "lichess_usernames": []},
-    {"canonical_name": "Alireza Firouzja", "lichess_usernames": []}
+    {
+      "canonical_name": "Magnus Carlsen",
+      "verified_usernames": ["DrNykterstein", "DannyTheDonkey"],
+      "conservative_candidate_usernames": [
+        "DrDrunkenstein", "MagnusCarlsen", "manwithavan", "DrChampionstein",
+        "DrGrekenstein", "STL_Carlsen", "damnsaltythatsport"
+      ]
+    },
+    {
+      "canonical_name": "Wesley So",
+      "verified_usernames": ["Wesley_So"],
+      "conservative_candidate_usernames": []
+    },
+    {
+      "canonical_name": "Levon Aronian",
+      "verified_usernames": [],
+      "conservative_candidate_usernames": ["Aronian_Levon"]
+    },
+    {
+      "canonical_name": "Fabiano Caruana",
+      "verified_usernames": [],
+      "conservative_candidate_usernames": ["Bombegranate", "FabianoCaruanaa", "Fabiano_Caruana26"]
+    },
+    {
+      "canonical_name": "Maxime Vachier-Lagrave",
+      "verified_usernames": ["avalongamemaster"],
+      "conservative_candidate_usernames": ["UnVieuxMonsieur"]
+    },
+    {
+      "canonical_name": "Hikaru Nakamura",
+      "verified_usernames": ["TSMFTXH"],
+      "conservative_candidate_usernames": []
+    },
+    {
+      "canonical_name": "Ian Nepomniachtchi",
+      "verified_usernames": ["Ian_Nepomniachtchi"],
+      "conservative_candidate_usernames": ["Jepetto"]
+    },
+    {
+      "canonical_name": "Alireza Firouzja",
+      "verified_usernames": ["alireza2003"],
+      "conservative_candidate_usernames": []
+    }
   ]
 }
