@@ -12,7 +12,14 @@ from torch.utils.data import DataLoader
 
 from amadeus_counterpoint.data.dataset import ChessDataset
 from amadeus_counterpoint.models import Chessformer
-from amadeus_counterpoint.training.trainer import load_checkpoint, train
+from amadeus_counterpoint.training.trainer import (
+    AMP_BACKOFF_FACTOR,
+    AMP_GROWTH_FACTOR,
+    AMP_GROWTH_INTERVAL,
+    AMP_INIT_SCALE,
+    load_checkpoint,
+    train,
+)
 
 # ---------------------------------------------------------------------------
 # Model configuration: Chessformer 79M
@@ -255,6 +262,10 @@ def main():
     scaler = torch.amp.GradScaler(
         device=device.type,
         enabled=use_amp,
+        init_scale=AMP_INIT_SCALE,
+        growth_factor=AMP_GROWTH_FACTOR,
+        backoff_factor=AMP_BACKOFF_FACTOR,
+        growth_interval=AMP_GROWTH_INTERVAL,
     )
 
     # -----------------------------------------------------------------------
