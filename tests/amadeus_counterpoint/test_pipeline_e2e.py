@@ -144,8 +144,11 @@ def test_full_dataloader_epoch_runs_through_training_loop(tmp_path):
         num_steps=100, accumulation_steps=1, log_every=1000,
     )
 
-    # The tiny dataset exhausts long before 100 optimizer updates.
-    assert 0 < global_step < 100
+    # The tiny dataset exhausts long before 100 optimizer updates, but
+    # training is fixed-step: train() re-iterates the real ChessDataset/
+    # DataLoader for fresh corpus passes (reshuffling shards and
+    # re-sampling positions each time) until num_steps is reached.
+    assert global_step == 100
 
 
 def test_tiny_overfit_reduces_policy_loss_substantially():

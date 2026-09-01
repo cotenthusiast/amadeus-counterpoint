@@ -1,6 +1,8 @@
+import pytest
 import torch
 
 from amadeus_counterpoint.models import Chessformer
+from amadeus_counterpoint.training.loss import chessformer_loss
 from amadeus_counterpoint.training.trainer import (
     load_checkpoint,
     save_checkpoint,
@@ -176,18 +178,206 @@ def test_requested_global_step_count_stops_training_early():
     assert len(consumed) == 8  # exactly 2 * accumulation_steps microbatches
 
 
-def test_dataloader_exhaustion_before_num_steps_does_not_crash():
+# --- multi-pass training: corpus exhaustion starts a fresh pass ------------
+#
+# Training is fixed-step (num_steps optimizer updates), not fixed-epoch.
+# When a repeatedly-iterable dataloader (a real DataLoader over
+# ChessDataset, or a plain list, as here) runs out mid-run, train() does
+# not stop early -- it re-iterates the SAME dataloader for a fresh
+# "corpus pass" and keeps going until num_steps is reached. For
+# ChessDataset specifically, re-iterating reshuffles shard order and
+# re-samples positions/history-masking from scratch (see
+# amadeus_counterpoint.data.dataset.ChessDataset.__iter__), so a pass
+# boundary is never a cached replay of the previous pass.
+
+
+def test_dataloader_exhaustion_before_num_steps_continues_into_a_fresh_pass():
     model = _build_model()
     optimizer, scheduler = _build_optimizer_and_scheduler(model)
 
-    # Only enough microbatches for 1 optimizer update, but num_steps asks for 5.
+    # Only 1 optimizer update's worth of microbatches per pass; num_steps=5
+    # requires 5 passes over this same 4-batch list.
     dataloader = _make_dataloader(num_batches=4)
     global_step = train(
         model, dataloader, optimizer, scheduler, DEVICE,
         num_steps=5, accumulation_steps=4, log_every=1000,
     )
 
-    assert global_step == 1
+    assert global_step == 5
+
+
+def test_global_step_and_scheduler_do_not_reset_across_pass_boundaries():
+    model = _build_model()
+    optimizer, scheduler = _build_optimizer_and_scheduler(model)
+
+    dataloader = _make_dataloader(num_batches=4)  # 1 optimizer update/pass
+    global_step = train(
+        model, dataloader, optimizer, scheduler, DEVICE,
+        num_steps=5, accumulation_steps=4, log_every=1000,
+    )
+
+    # Monotonic 1, 2, 3, 4, 5 across 5 passes -- a reset at any pass
+    # boundary would leave global_step, and the scheduler's own internal
+    # step counter, short of 5.
+    assert global_step == 5
+    assert scheduler.last_epoch == 5
+
+
+def test_optimizer_scheduler_scaler_state_persist_across_pass_boundary():
+    """Crossing a pass boundary (re-iterating the dataloader) must be
+    numerically indistinguishable from one continuous pass over the same
+    batches concatenated -- proving optimizer/scheduler/scaler state is
+    never reset or reinitialized at a pass boundary.
+    """
+    batches = _make_dataloader(num_batches=4, batch_size=2)
+
+    model_a = _build_model()
+    optimizer_a, scheduler_a = _build_optimizer_and_scheduler(model_a)
+    scaler_a = torch.amp.GradScaler(device="cpu", enabled=True, init_scale=64.0, growth_interval=1)
+    step_a = train(
+        model_a, batches, optimizer_a, scheduler_a, DEVICE,
+        num_steps=2, accumulation_steps=4, log_every=1000,
+        use_amp=True, scaler=scaler_a,
+    )  # 2 passes over the same 4-batch list
+
+    model_b = _build_model()
+    optimizer_b, scheduler_b = _build_optimizer_and_scheduler(model_b)
+    scaler_b = torch.amp.GradScaler(device="cpu", enabled=True, init_scale=64.0, growth_interval=1)
+    step_b = train(
+        model_b, batches + batches, optimizer_b, scheduler_b, DEVICE,
+        num_steps=2, accumulation_steps=4, log_every=1000,
+        use_amp=True, scaler=scaler_b,
+    )  # one continuous pass over the duplicated batches
+
+    assert step_a == step_b == 2
+    assert scaler_a.get_scale() == scaler_b.get_scale()
+    assert scheduler_a.last_epoch == scheduler_b.last_epoch
+    for p_a, p_b in zip(model_a.parameters(), model_b.parameters()):
+        assert torch.allclose(p_a, p_b, atol=1e-6, rtol=1e-5)
+
+
+def test_model_keeps_improving_across_many_pass_boundaries():
+    """A single-microbatch 'corpus' forces one pass boundary per optimizer
+    update; loss should still trend down, confirming learning is not
+    disrupted at pass boundaries."""
+    model = _build_model()
+    optimizer, scheduler = _build_optimizer_and_scheduler(model, lr=5e-2)
+
+    fixed_batch = _make_batch(batch_size=4)
+    dataloader = [fixed_batch]  # 1 microbatch/pass at accumulation_steps=1
+
+    def policy_loss_of():
+        model.eval()
+        with torch.no_grad():
+            policy_logits, value_logits = model(
+                fixed_batch["x"], fixed_batch["player_elo"], fixed_batch["opponent_elo"]
+            )
+            _, policy_loss, _ = chessformer_loss(
+                policy_logits, value_logits,
+                fixed_batch["policy_target"], fixed_batch["value_target"], fixed_batch["legal_mask"],
+            )
+        model.train()
+        return policy_loss.item()
+
+    initial_loss = policy_loss_of()
+    # 50 optimizer updates from a 1-batch "corpus" => 50 pass boundaries.
+    # The batch holds 4 distinct random positions/targets (not one
+    # repeated example), so this converges gradually rather than
+    # overfitting sharply -- the assertion only needs to show real,
+    # sustained improvement across many pass boundaries, not convergence.
+    train(
+        model, dataloader, optimizer, scheduler, DEVICE,
+        num_steps=50, accumulation_steps=1, log_every=1000,
+    )
+    final_loss = policy_loss_of()
+
+    assert final_loss < initial_loss * 0.9
+
+
+def test_empty_dataloader_raises_clearly_instead_of_looping_forever():
+    model = _build_model()
+    optimizer, scheduler = _build_optimizer_and_scheduler(model)
+
+    with pytest.raises(RuntimeError, match="zero microbatches"):
+        train(
+            model, [], optimizer, scheduler, DEVICE,
+            num_steps=1, accumulation_steps=1, log_every=1000,
+        )
+
+
+def test_pass_that_goes_empty_mid_run_raises_clearly_instead_of_looping_forever():
+    """A one-shot (self-exhausting) iterable simulates a corpus with
+    genuinely no more data for a second pass -- e.g. a bug that leaves a
+    dataloader non-restartable. This must fail clearly, not hang.
+    """
+    model = _build_model()
+    optimizer, scheduler = _build_optimizer_and_scheduler(model)
+
+    def one_shot_dataloader():
+        yield from _make_dataloader(num_batches=4)  # exactly 1 optimizer update
+
+    with pytest.raises(RuntimeError, match="zero microbatches"):
+        train(
+            model, one_shot_dataloader(), optimizer, scheduler, DEVICE,
+            num_steps=2, accumulation_steps=4, log_every=1000,
+        )
+
+
+def test_smaller_final_microbatch_still_completes_an_optimizer_update():
+    """train() has no concept of an intended physical batch size -- it
+    treats whatever batch it receives as one microbatch. This is exactly
+    why scripts/train.py's DataLoader must use drop_last=True at
+    accumulation_steps=1: without it, an undersized trailing batch at a
+    corpus-pass boundary would silently complete an optimizer update at a
+    smaller-than-intended effective batch. This test pins that underlying
+    mechanism so the drop_last requirement doesn't silently bit-rot.
+    """
+    model = _build_model()
+    optimizer, scheduler = _build_optimizer_and_scheduler(model)
+
+    full_batch = _make_batch(batch_size=4)
+    undersized_batch = _make_batch(batch_size=1)
+
+    step_calls = []
+    original_step = optimizer.step
+    optimizer.step = lambda *a, **kw: step_calls.append(1) or original_step(*a, **kw)
+
+    train(
+        model, [full_batch, undersized_batch], optimizer, scheduler, DEVICE,
+        num_steps=2, accumulation_steps=1, log_every=1000,
+    )
+
+    # Both the full-size and undersized batches completed their own
+    # optimizer update -- train() does not protect against this itself.
+    assert len(step_calls) == 2
+
+
+def test_checkpoint_resume_works_across_a_multipass_run(tmp_path):
+    model = _build_model()
+    optimizer, scheduler = _build_optimizer_and_scheduler(model)
+
+    dataloader = _make_dataloader(num_batches=4)  # 1 optimizer update/pass
+    global_step = train(
+        model, dataloader, optimizer, scheduler, DEVICE,
+        num_steps=3, accumulation_steps=4, log_every=1000,
+        checkpoint_dir=tmp_path, checkpoint_every=1,
+    )
+    assert global_step == 3
+    assert (tmp_path / "step_00000003.pt").exists()
+
+    resumed_model = _build_model()
+    resumed_optimizer, resumed_scheduler = _build_optimizer_and_scheduler(resumed_model)
+    restored_step = load_checkpoint(
+        tmp_path / "step_00000003.pt", resumed_model, resumed_optimizer, resumed_scheduler, DEVICE,
+    )
+    assert restored_step == 3
+
+    # Resume for 2 more updates -- itself spanning 2 more pass boundaries.
+    final_step = train(
+        resumed_model, dataloader, resumed_optimizer, resumed_scheduler, DEVICE,
+        num_steps=5, accumulation_steps=4, log_every=1000, start_step=restored_step,
+    )
+    assert final_step == 5
 
 
 def test_use_amp_on_cpu_is_a_safe_no_op():

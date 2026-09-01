@@ -183,11 +183,17 @@ def main():
         shuffle_buffer_size=SHUFFLE_BUFFER_SIZE,
     )
 
+    # drop_last=True: with accumulation_steps=1, every microbatch IS an
+    # optimizer update, so an undersized trailing batch at the end of a
+    # corpus pass would otherwise silently shrink that one update's
+    # effective batch below 512. Dropping it keeps every optimizer update
+    # at exactly BATCH_SIZE * ACCUMULATION_STEPS examples.
     dataloader = DataLoader(
         dataset,
         batch_size=BATCH_SIZE,
         num_workers=NUM_WORKERS,
         pin_memory=torch.cuda.is_available(),
+        drop_last=True,
     )
 
     # -----------------------------------------------------------------------

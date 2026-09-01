@@ -64,11 +64,28 @@ def train(
 ) -> int:
     """Train Chessformer for a fixed number of optimizer updates.
 
+    Training is fixed-step, not fixed-epoch: `dataloader` is iterated
+    repeatedly, as many times as needed ("corpus passes"), until exactly
+    `num_steps` optimizer updates have run. Corpus exhaustion mid-run is not
+    an error -- it simply starts a fresh pass by re-iterating `dataloader`
+    (`iter(dataloader)` again), which for `ChessDataset` reshuffles shard
+    order and re-samples positions from scratch (see `iter_game_examples`),
+    including an independent 5%-history-masking reroll per position. No
+    sampled position is ever cached or replayed verbatim across passes.
+    optimizer/scheduler/scaler/global_step persist across pass boundaries
+    exactly as within one pass -- a pass boundary has no special handling
+    beyond re-iterating `dataloader`.
+
     Checkpoints (model/optimizer/scheduler/scaler/global_step) are written
     every `checkpoint_every` OPTIMIZER steps to `checkpoint_dir`, if given.
     Returns the final global step, so training can be resumed by passing that
     value back in as `start_step`, together with a `scaler` whose state was
     restored via `load_checkpoint`.
+
+    Raises:
+        RuntimeError: If a pass yields zero microbatches (an empty or
+            exhausted-below-one-batch dataloader), which would otherwise
+            repeat forever without making progress.
     """
 
     model.train()
@@ -95,88 +112,105 @@ def train(
     running_value_loss = 0.0
     running_batches = 0
 
-    for batch in dataloader:
-        # Move the batch from CPU memory to the training device. non_blocking
-        # only has an effect for pinned-memory CPU tensors on a CUDA device;
-        # it is a safe no-op (falls back to a blocking copy) otherwise.
-        x = batch["x"].to(device, non_blocking=True)
-        player_elo = batch["player_elo"].to(device, non_blocking=True)
-        opponent_elo = batch["opponent_elo"].to(device, non_blocking=True)
-        policy_target = batch["policy_target"].to(device, non_blocking=True)
-        value_target = batch["value_target"].to(device, non_blocking=True)
-        legal_mask = batch["legal_mask"].to(device, non_blocking=True)
+    corpus_pass = 0
 
-        # Forward pass and loss.
-        with torch.autocast(device_type=device.type, enabled=use_amp):
-            policy_logits, value_logits = model(
-                x,
-                player_elo,
-                opponent_elo,
-            )
+    while global_step < num_steps:
+        corpus_pass += 1
+        microbatches_this_pass = 0
 
-            total_loss, policy_loss, value_loss = chessformer_loss(
-                policy_logits,
-                value_logits,
-                policy_target,
-                value_target,
-                legal_mask,
-                value_coefficient,
-            )
+        for batch in dataloader:
+            microbatches_this_pass += 1
 
-        # Track the real, unscaled losses for logging.
-        running_total_loss += total_loss.item()
-        running_policy_loss += policy_loss.item()
-        running_value_loss += value_loss.item()
-        running_batches += 1
+            # Move the batch from CPU memory to the training device. non_blocking
+            # only has an effect for pinned-memory CPU tensors on a CUDA device;
+            # it is a safe no-op (falls back to a blocking copy) otherwise.
+            x = batch["x"].to(device, non_blocking=True)
+            player_elo = batch["player_elo"].to(device, non_blocking=True)
+            opponent_elo = batch["opponent_elo"].to(device, non_blocking=True)
+            policy_target = batch["policy_target"].to(device, non_blocking=True)
+            value_target = batch["value_target"].to(device, non_blocking=True)
+            legal_mask = batch["legal_mask"].to(device, non_blocking=True)
 
-        # Divide because gradients from multiple microbatches are accumulated.
-        loss = total_loss / accumulation_steps
-        scaler.scale(loss).backward()
-
-        accumulation_counter += 1
-
-        if accumulation_counter == accumulation_steps:
-            # Gradients must be unscaled before clipping, or the clip
-            # threshold would be applied to AMP-scaled gradients.
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(
-                model.parameters(),
-                max_grad_norm,
-            )
-
-            scaler.step(optimizer)
-            scaler.update()
-            scheduler.step()
-            optimizer.zero_grad(set_to_none=True)
-
-            global_step += 1
-            accumulation_counter = 0
-
-            if global_step % log_every == 0:
-                print(
-                    f"step {global_step}/{num_steps} | "
-                    f"loss {running_total_loss / running_batches:.4f} | "
-                    f"policy {running_policy_loss / running_batches:.4f} | "
-                    f"value {running_value_loss / running_batches:.4f} | "
-                    f"lr {optimizer.param_groups[0]['lr']:.2e}"
+            # Forward pass and loss.
+            with torch.autocast(device_type=device.type, enabled=use_amp):
+                policy_logits, value_logits = model(
+                    x,
+                    player_elo,
+                    opponent_elo,
                 )
 
-                running_total_loss = 0.0
-                running_policy_loss = 0.0
-                running_value_loss = 0.0
-                running_batches = 0
-
-            if checkpoint_dir is not None and global_step % checkpoint_every == 0:
-                save_checkpoint(
-                    Path(checkpoint_dir) / f"step_{global_step:08d}.pt",
-                    model,
-                    optimizer,
-                    scheduler,
-                    global_step,
-                    scaler=scaler,
+                total_loss, policy_loss, value_loss = chessformer_loss(
+                    policy_logits,
+                    value_logits,
+                    policy_target,
+                    value_target,
+                    legal_mask,
+                    value_coefficient,
                 )
 
-            if global_step == num_steps:
-                break
+            # Track the real, unscaled losses for logging.
+            running_total_loss += total_loss.item()
+            running_policy_loss += policy_loss.item()
+            running_value_loss += value_loss.item()
+            running_batches += 1
+
+            # Divide because gradients from multiple microbatches are accumulated.
+            loss = total_loss / accumulation_steps
+            scaler.scale(loss).backward()
+
+            accumulation_counter += 1
+
+            if accumulation_counter == accumulation_steps:
+                # Gradients must be unscaled before clipping, or the clip
+                # threshold would be applied to AMP-scaled gradients.
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(
+                    model.parameters(),
+                    max_grad_norm,
+                )
+
+                scaler.step(optimizer)
+                scaler.update()
+                scheduler.step()
+                optimizer.zero_grad(set_to_none=True)
+
+                global_step += 1
+                accumulation_counter = 0
+
+                if global_step % log_every == 0:
+                    print(
+                        f"step {global_step}/{num_steps} | "
+                        f"pass {corpus_pass} | "
+                        f"loss {running_total_loss / running_batches:.4f} | "
+                        f"policy {running_policy_loss / running_batches:.4f} | "
+                        f"value {running_value_loss / running_batches:.4f} | "
+                        f"lr {optimizer.param_groups[0]['lr']:.2e}"
+                    )
+
+                    running_total_loss = 0.0
+                    running_policy_loss = 0.0
+                    running_value_loss = 0.0
+                    running_batches = 0
+
+                if checkpoint_dir is not None and global_step % checkpoint_every == 0:
+                    save_checkpoint(
+                        Path(checkpoint_dir) / f"step_{global_step:08d}.pt",
+                        model,
+                        optimizer,
+                        scheduler,
+                        global_step,
+                        scaler=scaler,
+                    )
+
+                if global_step == num_steps:
+                    break
+
+        if microbatches_this_pass == 0:
+            raise RuntimeError(
+                f"Corpus pass {corpus_pass} yielded zero microbatches "
+                f"(global_step={global_step}/{num_steps}) -- the dataloader "
+                "is empty or cannot supply even one batch. Refusing to loop "
+                "forever; check the corpus/shard directory and batch_size."
+            )
 
     return global_step
