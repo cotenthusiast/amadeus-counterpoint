@@ -159,6 +159,10 @@ def main():
         "--checkpoint-every", type=int, default=CHECKPOINT_EVERY,
         help="Override for smoke/gate runs; production launches use the default (1,000).",
     )
+    parser.add_argument(
+        "--log-every", type=int, default=100,
+        help="Override for smoke/gate runs to see progress on short runs.",
+    )
     args = parser.parse_args()
 
     shard_dir = args.shard_dir
@@ -305,6 +309,7 @@ def main():
         value_coefficient=VALUE_COEFFICIENT,
         checkpoint_dir=checkpoint_dir,
         checkpoint_every=args.checkpoint_every,
+        log_every=args.log_every,
         start_step=start_step,
         use_amp=USE_AMP,
         scaler=scaler,
