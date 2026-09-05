@@ -3,11 +3,15 @@
 import argparse
 import hashlib
 import json
+import os
 import socket
 import subprocess
+import sys
 import time
 from pathlib import Path
 
+import chess
+import pyarrow
 import torch
 from torch.utils.data import DataLoader
 
@@ -95,6 +99,38 @@ def _git_commit() -> str:
         return "unknown"
 
 
+def _git_dirty() -> bool:
+    """True if the working tree has uncommitted changes -- if so, git_commit
+    alone does not fully describe the code that actually ran."""
+    try:
+        output = subprocess.check_output(
+            ["git", "status", "--porcelain"], cwd=Path(__file__).resolve().parent
+        ).decode()
+    except Exception:  # noqa: BLE001
+        return True  # fail safe: "can't tell" is treated as dirty
+    return bool(output.strip())
+
+
+def _gpu_uuid(device: torch.device) -> str:
+    if device.type != "cuda":
+        return "cpu"
+    try:
+        output = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=uuid", "--format=csv,noheader", "-i", "0"]
+        ).decode().strip()
+        return output or "unknown"
+    except Exception:  # noqa: BLE001
+        return "unknown"
+
+
+def _shard_manifest_hash(shard_dir: Path) -> str:
+    """Fingerprint of exactly which shard files exist right now -- a cheap
+    tripwire for the corpus changing under a multi-job production run."""
+    names = sorted(p.name for p in Path(shard_dir).glob("*.parquet"))
+    joined = "\n".join(names)
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()
+
+
 def _target_aliases_meta(path: str = "configs/target_aliases.json") -> dict:
     try:
         raw = Path(path).read_text(encoding="utf-8")
@@ -109,21 +145,32 @@ def _target_aliases_meta(path: str = "configs/target_aliases.json") -> dict:
 
 def _write_run_metadata(
     checkpoint_dir: Path, device: torch.device, shard_dir: Path,
-    num_steps: int, checkpoint_every: int,
+    num_steps: int, checkpoint_every: int, start_step: int, args: argparse.Namespace,
 ) -> None:
     shard_count = len(list(Path(shard_dir).glob("*.parquet")))
     metadata = {
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "hostname": socket.gethostname(),
         "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else "cpu",
+        "gpu_uuid": _gpu_uuid(device),
+        "python_version": sys.version,
         "pytorch_version": torch.__version__,
         "cuda_version": torch.version.cuda,
+        "python_chess_version": chess.__version__,
+        "pyarrow_version": pyarrow.__version__,
         "git_commit": _git_commit(),
+        "git_dirty": _git_dirty(),
+        "cli_argv": sys.argv,
+        "cli_args": {k: str(v) for k, v in vars(args).items()},
+        "slurm_job_id": os.environ.get("SLURM_JOB_ID", "not_running_under_slurm"),
+        "slurm_partition": os.environ.get("SLURM_JOB_PARTITION", "not_running_under_slurm"),
         "seed": SEED,
         "shard_dir": str(shard_dir),
         "shard_count": shard_count,
+        "shard_manifest_hash": _shard_manifest_hash(shard_dir),
         "target_aliases": _target_aliases_meta(),
         "checkpoint_dir": str(checkpoint_dir),
+        "start_step": start_step,
         "config": {
             "d_model": D_MODEL,
             "num_heads": NUM_HEADS,
@@ -193,8 +240,6 @@ def main():
 
     print(f"Using device: {device}")
     torch.manual_seed(SEED)
-
-    _write_run_metadata(checkpoint_dir, device, shard_dir, args.num_steps, args.checkpoint_every)
 
     # -----------------------------------------------------------------------
     # Dataset and DataLoader
@@ -310,6 +355,11 @@ def main():
         print(f"Resumed from {latest} at global_step={start_step}")
     else:
         print("No existing checkpoint found -- starting from step 0")
+
+    _write_run_metadata(
+        checkpoint_dir, device, shard_dir, args.num_steps, args.checkpoint_every,
+        start_step, args,
+    )
 
     # -----------------------------------------------------------------------
     # Train
