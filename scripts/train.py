@@ -1,6 +1,7 @@
 """Launch Chessformer training."""
 
 import argparse
+import hashlib
 import json
 import socket
 import subprocess
@@ -94,17 +95,34 @@ def _git_commit() -> str:
         return "unknown"
 
 
+def _target_aliases_meta(path: str = "configs/target_aliases.json") -> dict:
+    try:
+        raw = Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return {"path": path, "sha256": "unavailable", "targets": None}
+    return {
+        "path": path,
+        "sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+        "targets": len(json.loads(raw).get("targets", [])),
+    }
+
+
 def _write_run_metadata(
     checkpoint_dir: Path, device: torch.device, shard_dir: Path,
     num_steps: int, checkpoint_every: int,
 ) -> None:
+    shard_count = len(list(Path(shard_dir).glob("*.parquet")))
     metadata = {
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "hostname": socket.gethostname(),
         "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else "cpu",
+        "pytorch_version": torch.__version__,
+        "cuda_version": torch.version.cuda,
         "git_commit": _git_commit(),
         "seed": SEED,
         "shard_dir": str(shard_dir),
+        "shard_count": shard_count,
+        "target_aliases": _target_aliases_meta(),
         "checkpoint_dir": str(checkpoint_dir),
         "config": {
             "d_model": D_MODEL,
