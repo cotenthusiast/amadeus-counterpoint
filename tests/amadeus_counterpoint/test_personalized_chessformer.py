@@ -193,3 +193,23 @@ def test_nonzero_value_coefficient_changes_the_gradient():
     # Sanity check that value_coefficient is actually wired up: a nonzero
     # coefficient must change the gradient relative to the zero-coefficient case.
     assert not torch.allclose(grad_zero, grad_one)
+
+
+# --- device handling -------------------------------------------------------
+
+
+def test_z_player_init_follows_base_device_not_cpu_default():
+    """Regression test for a real bug found during Kelvin2 GPU smoke testing:
+    PersonalizedChessformer.__init__ created the nominal-Elo tensor with
+    torch.tensor(...) (implicit CPU default) and fed it to base.interpolate_elo,
+    which crashed with a device-mismatch RuntimeError whenever `base` was
+    already on CUDA. `meta` is used here as a real, distinct device that
+    requires no GPU: it reproduces the same "expected all tensors on the
+    same device" failure as CPU-vs-CUDA did, so this test fails on the old
+    code and passes on the fix, without needing actual CUDA hardware.
+    """
+    model = build_model().to("meta")
+
+    wrapper = PersonalizedChessformer(model, nominal_elo=2000.0, identity="test-player")
+
+    assert wrapper.z_player.device.type == "meta"

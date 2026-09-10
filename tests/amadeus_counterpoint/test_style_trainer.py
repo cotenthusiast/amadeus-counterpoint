@@ -185,3 +185,59 @@ def test_validate_target_outside_topk_gives_finite_loss_and_false_coverage():
 
     assert torch.isfinite(torch.tensor(report.mean_ce))
     assert report.coverage == 0.0
+
+
+# --- device handling ---------------------------------------------------------
+
+
+def test_score_succeeds_when_base_is_on_a_non_cpu_device():
+    """Regression test for a real bug found during Kelvin2 GPU smoke testing:
+    train_epoch/validate never moved DataLoader batches (always plain CPU
+    tensors) onto the model's device, so every real CUDA run crashed the
+    moment a batch was used. `meta` is a real, distinct device requiring no
+    GPU: it reproduces the same "expected all tensors on the same device"
+    failure as CPU-vs-CUDA did, so this fails on the old code and passes on
+    the fix.
+    """
+    base = Chessformer(**CONFIG).to("meta")
+    cnn = MoveStyleCNN(style_dim=STYLE_DIM).to("meta")
+    table = PlayerStyleTable(num_players=NUM_PLAYERS, style_dim=STYLE_DIM).to("meta")
+    residual = StyleResidual(style_dim=STYLE_DIM).to("meta")
+    trainer = StyleTrainer(base, cnn, table, residual, k=5)
+
+    batch = synthetic_batch(4)  # plain CPU tensors, exactly what a real DataLoader yields
+    assert batch["x"].device.type == "cpu"
+
+    moved = trainer._to_device(batch)
+    output = trainer._score(moved, target_index=moved["policy_target"])
+
+    assert output.candidate_scores.device.type == "meta"
+
+
+def test_train_epoch_and_validate_move_batches_before_use():
+    """Wiring check: train_epoch/validate must actually call the device
+    transfer, not just have it available -- guards against someone removing
+    the call while leaving `_to_device` itself correct."""
+    trainer = build_trainer()
+
+    calls = []
+    original = trainer._to_device
+    trainer._to_device = lambda batch: (calls.append(1), original(batch))[1]
+
+    trainer.train_epoch([synthetic_batch(4), synthetic_batch(4)])
+    trainer.validate([synthetic_batch(4)])
+
+    assert len(calls) == 3
+
+
+def test_device_falls_back_to_cpu_for_a_parameterless_base():
+    """FakeBase (used elsewhere in this file) has no .parameters() -- device
+    inference must not crash for it, and must default to CPU, which is
+    always correct since FakeBase is only ever used in CPU-only tests."""
+    base = FakeBase(torch.zeros(1, 4352))
+    cnn = MoveStyleCNN(style_dim=STYLE_DIM)
+    table = PlayerStyleTable(num_players=1, style_dim=STYLE_DIM)
+    residual = StyleResidual(style_dim=STYLE_DIM)
+    trainer = StyleTrainer(base, cnn, table, residual, k=3)
+
+    assert trainer.device == torch.device("cpu")

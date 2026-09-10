@@ -66,3 +66,46 @@ def test_validate_tracks_best_val_loss_and_early_stopping_counter():
     assert third == 0.5
     assert trainer.best_val_loss == 0.5  # improved
     assert trainer.epochs_without_improvement == 0
+
+
+# --- device handling -------------------------------------------------------
+
+
+def test_batch_forward_succeeds_when_base_is_on_a_non_cpu_device():
+    """Regression test for a real bug found during Kelvin2 GPU smoke testing:
+    train_epoch/validate never moved DataLoader batches (always plain CPU
+    tensors) onto the model's device, so every real CUDA run crashed the
+    moment a batch was used. `meta` is a real, distinct device requiring no
+    GPU: it reproduces the same "expected all tensors on the same device"
+    failure as CPU-vs-CUDA did, so this fails on the old code and passes on
+    the fix.
+    """
+    base = Chessformer(**CONFIG).to("meta")
+    wrapper = PersonalizedChessformer(base, nominal_elo=1600.0, identity="p0")
+    trainer = Method1Trainer(wrapper, lr=0.1)
+
+    batch = _tiny_batch()  # plain CPU tensors, exactly what a real DataLoader yields
+    assert batch["x"].device.type == "cpu"
+
+    moved = trainer._to_device(batch)
+    loss = trainer._policy_loss(moved)
+
+    assert loss.device.type == "meta"
+
+
+def test_train_epoch_and_validate_move_batches_before_use():
+    """Wiring check: train_epoch/validate must actually call the device
+    transfer, not just have it available -- guards against someone removing
+    the call while leaving `_to_device` itself correct."""
+    base = Chessformer(**CONFIG)
+    wrapper = PersonalizedChessformer(base, nominal_elo=1600.0, identity="p0")
+    trainer = Method1Trainer(wrapper, lr=0.1)
+
+    calls = []
+    original = trainer._to_device
+    trainer._to_device = lambda batch: (calls.append(1), original(batch))[1]
+
+    trainer.train_epoch([_tiny_batch(), _tiny_batch()])
+    trainer.validate([_tiny_batch()])
+
+    assert len(calls) == 3

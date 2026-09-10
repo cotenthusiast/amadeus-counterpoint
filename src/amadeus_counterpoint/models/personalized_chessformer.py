@@ -20,9 +20,15 @@ class PersonalizedChessformer(nn.Module):
         self.base = base
         self.base.requires_grad_(False)
 
+        # base may already be on a non-CPU device (e.g. moved there by the
+        # caller before wrapping) -- the nominal-Elo tensor must be created
+        # on that same device, not default to CPU, or interpolate_elo's
+        # arithmetic against base's (possibly CUDA) embedding weights raises
+        # a device-mismatch error.
+        device = next(base.parameters()).device
         with torch.no_grad():
             init = base.interpolate_elo(
-                torch.tensor([nominal_elo], dtype=torch.float32)
+                torch.tensor([nominal_elo], dtype=torch.float32, device=device)
             ).squeeze(0).clone()
         self.z_player = nn.Parameter(init)
 

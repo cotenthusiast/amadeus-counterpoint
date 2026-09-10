@@ -37,6 +37,17 @@ DEFAULT_LEARNING_RATE = 1e-3
 DEFAULT_WEIGHT_DECAY = 1e-4
 
 
+def _infer_device(module) -> torch.device:
+    """Best-effort device detection from a module's own parameters, so batch
+    tensors can be moved to wherever the model actually lives instead of
+    assuming CPU or hardcoding CUDA. Falls back to CPU for parameter-less
+    test doubles (e.g. FakeBase), which are only ever used in CPU-only tests."""
+    try:
+        return next(module.parameters()).device
+    except (AttributeError, StopIteration):
+        return torch.device("cpu")
+
+
 @dataclass
 class PlayerMetrics:
     player_id: int
@@ -78,6 +89,7 @@ class StyleTrainer:
         self.table = table
         self.residual = residual
         self.k = k
+        self.device = _infer_device(self.base)
 
         self.optimizer = torch.optim.AdamW(
             list(cnn.parameters()) + list(table.parameters()) + list(residual.parameters()),
@@ -88,6 +100,12 @@ class StyleTrainer:
         self.current_epoch = 0
         self.best_val_loss = float("inf")
         self.epochs_without_improvement = 0
+
+    def _to_device(self, batch: dict) -> dict:
+        """DataLoader batches are plain CPU tensors regardless of where the
+        model lives -- move every tensor to `self.base`'s device before
+        use."""
+        return {key: value.to(self.device) for key, value in batch.items()}
 
     def _score(self, batch: dict, target_index: torch.Tensor | None):
         return score_candidates(
@@ -115,6 +133,7 @@ class StyleTrainer:
         num_batches = 0
 
         for batch in train_loader:
+            batch = self._to_device(batch)
             output = self._score(batch, target_index=batch["policy_target"])
             loss = F.cross_entropy(output.candidate_scores, output.local_target_index)
 
@@ -149,6 +168,7 @@ class StyleTrainer:
 
         with torch.no_grad():
             for batch in val_loader:
+                batch = self._to_device(batch)
                 target = batch["policy_target"]
                 output = self._score(batch, target_index=target)
 

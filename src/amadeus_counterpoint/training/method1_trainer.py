@@ -31,6 +31,17 @@ DEFAULT_LEARNING_RATE = 1e-3
 DEFAULT_WEIGHT_DECAY = 1e-4
 
 
+def _infer_device(module) -> torch.device:
+    """Best-effort device detection from a module's own parameters, so batch
+    tensors can be moved to wherever the model actually lives instead of
+    assuming CPU or hardcoding CUDA. Falls back to CPU for parameter-less
+    test doubles, which are only ever used in CPU-only tests."""
+    try:
+        return next(module.parameters()).device
+    except (AttributeError, StopIteration):
+        return torch.device("cpu")
+
+
 class Method1Trainer:
     """Owns Method-1's frozen-base/trainable-z_player training mechanics.
 
@@ -46,6 +57,7 @@ class Method1Trainer:
     ):
         self.wrapper = wrapper
         self.wrapper.base.requires_grad_(False)
+        self.device = _infer_device(self.wrapper)
 
         self.optimizer = torch.optim.AdamW(
             [self.wrapper.z_player], lr=lr, weight_decay=weight_decay,
@@ -54,6 +66,12 @@ class Method1Trainer:
         self.current_epoch = 0
         self.best_val_loss = float("inf")
         self.epochs_without_improvement = 0
+
+    def _to_device(self, batch: dict) -> dict:
+        """DataLoader batches are plain CPU tensors regardless of where the
+        model lives -- move every tensor to `self.wrapper`'s device before
+        use."""
+        return {key: value.to(self.device) for key, value in batch.items()}
 
     def _policy_loss(self, batch) -> torch.Tensor:
         policy_logits, _ = self.wrapper(batch["x"], batch["player_elo"], batch["opponent_elo"])
@@ -70,6 +88,7 @@ class Method1Trainer:
         num_batches = 0
 
         for batch in train_loader:
+            batch = self._to_device(batch)
             loss = self._policy_loss(batch)
 
             self.optimizer.zero_grad()
@@ -94,6 +113,7 @@ class Method1Trainer:
 
         with torch.no_grad():
             for batch in val_loader:
+                batch = self._to_device(batch)
                 loss = self._policy_loss(batch)
                 total_loss += loss.item()
                 num_batches += 1
