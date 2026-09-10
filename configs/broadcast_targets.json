@@ -1,0 +1,53 @@
+{
+  "_provenance": "Broadcast-corpus target identity for Method 1/2 personalization ingestion (Stage 6). Matching order: exact FIDE ID first (the raw PGN's WhiteFideId/BlackFideId header, compared as an exact string against fide_id below), exact-string alias fallback second (used only when that side's FIDE ID header is missing/blank). This is a manually curated mapping for exactly these 8 players against this exact corpus, not a general-purpose name resolver -- runtime matching stays plain exact-string comparison, never fuzzy/substring/heuristic. Aliases were curated (2026-09-09 pass) against /home/cotenthusiast/Data/lichess_broadcasts/ under a relaxed evidence standard: an exact string is included when the total corpus/audit evidence makes its identity unambiguous for these 8 people, via any of -- direct FIDE-ID co-occurrence; repeated use in named elite events (event/round/study headers) where the roster is unambiguous; repeated games against other already-verified cohort members; an obvious formatting variant of an already-verified full name (title prefix, name order, doubled whitespace, punctuation, concatenation, country/federation code); or a known online handle the audit's own FIDE-ID clustering ties unambiguously to the target with no conflicting FIDE ID anywhere in the corpus. A handful of strings that visually resemble a target but plausibly name a different real person (e.g. 'Magnus Øen Carlsen', a distinct middle name with no corroborating evidence) were deliberately excluded -- false positives remain unacceptable even under this relaxed standard. canonical_name is a provenance label only and is never matched directly. UPDATE 2026-09-10: 6 verified aliases (MagzyBogues, GMHikaru, STL_Caruana, STL_Nakamura, M. Vachier-Lagrave, FantasticStar) synced in from the independently audited Kelvin2 amadeus-broadcast-data workspace's configs/target_names.json (verified_name_strings tier only -- its conservative_candidate_name_strings tier, e.g. 'Hikaru', 'Offerspill-M. Carlsen', was deliberately NOT imported). See configs/quarantined_broadcast_games.json for exact games excluded as a direct consequence of two of these additions (MagzyBogues, GMHikaru) pairing against the unverified handle 'pedestrian' in two 2020 exhibition mini-matches.",
+  "targets": [
+    {
+      "player_id": 0,
+      "canonical_name": "Magnus Carlsen",
+      "fide_id": "1503014",
+      "aliases": ["Carlsen, Magnus", "Magnus Carlsen", "MagnusCarlsen", "Carlsen Magnus", "Carlsen Magnus (NOR)", "GM Magnus Carlsen", "Carlsen Magnus  (NOR)", "Carlsen Magnus  *) (NOR)", "MagzyBogues"]
+    },
+    {
+      "player_id": 1,
+      "canonical_name": "Wesley So",
+      "fide_id": "5202213",
+      "aliases": ["So, Wesley", "Wesley So", "So Wesley (USA)", "GM Wesley So", "So Wesley", "GMWSO"]
+    },
+    {
+      "player_id": 2,
+      "canonical_name": "Levon Aronian",
+      "fide_id": "13300474",
+      "aliases": ["Aronian, Levon", "Levon Aronian", "Aronian Levon", "Aronian Levon (ARM)", "LevonAronian", "Aronian Levon  (ARM)", "GM Levon Aronian", "Aronian Levon  (USA)"]
+    },
+    {
+      "player_id": 3,
+      "canonical_name": "Fabiano Caruana",
+      "fide_id": "2020009",
+      "aliases": ["Caruana, Fabiano", "Fabiano Caruana", "Caruana Fabiano", "Caruana Fabiano (USA)", "Caruana Fabiano  (USA)", "GM Fabiano Caruana", "STL_Caruana"]
+    },
+    {
+      "player_id": 4,
+      "canonical_name": "Maxime Vachier-Lagrave",
+      "fide_id": "623539",
+      "aliases": ["Vachier-Lagrave, Maxime", "Maxime Vachier-Lagrave", "Vachier-Lagrave Maxime (FRA)", "Vachier-Lagrave Maxime  (FRA)", "GM Maxime Vachier-Lagrave", "Maxime ASN Vachier Lagrave", "LyonBeast", "M. Vachier-Lagrave"]
+    },
+    {
+      "player_id": 5,
+      "canonical_name": "Hikaru Nakamura",
+      "fide_id": "2016192",
+      "aliases": ["Nakamura, Hikaru", "Hikaru Nakamura", "Nakamura Hikaru (USA)", "GM Hikaru Nakamura", "Nakamura Hikaru  (USA)", "Nakamura, Nakamura, Hikaru", "GMHikaru", "STL_Nakamura"]
+    },
+    {
+      "player_id": 6,
+      "canonical_name": "Ian Nepomniachtchi",
+      "fide_id": "4168119",
+      "aliases": ["Nepomniachtchi, Ian", "Nepomniachtchi Ian (FID)", "Ian Nepomniachtchi", "GM Ian Nepomniachtchi", "Ian_Nepomniachtchi", "Nepomniachtchi Ian  (CFR)", "lachesisQ"]
+    },
+    {
+      "player_id": 7,
+      "canonical_name": "Alireza Firouzja",
+      "fide_id": "12573981",
+      "aliases": ["Firouzja, Alireza", "Alireza Firouzja", "Firouzja Alireza (FRA)", "GM Alireza Firouzja", "Firouzja Alireza  (FRA)", "FantasticStar"]
+    }
+  ]
+}

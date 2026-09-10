@@ -1,0 +1,37 @@
+{
+  "_provenance": "Games excluded from Stage-6 personalization ingestion (data.broadcast_ingest) as a direct side effect of the 2026-09-10 verified-alias sync in configs/broadcast_targets.json. Adding a verified target alias makes match_target() resolve one side of these games to a target while the OTHER side is an opponent identity that is not, and cannot currently be, resolved to a specific real person -- so before this file existed, these would have silently entered that target's cohort-excluded training data as ordinary one-target games, even though the true opponent's identity (and therefore whether this is really a target-vs-target game requiring sealing) is unknown. Matched by exact GameURL (unique per game; see the raw PGN's [GameURL] header) -- no fuzzy matching, no name-based resolution.",
+  "groups": [
+    {
+      "opponent_handle": "pedestrian",
+      "reason": "A 2020 chess24-hosted 'guess who' exhibition series replaced some players' real names with joke Lichess-style usernames. The Kelvin2 amadeus-broadcast-data audit (configs/ambiguous_decoy_identities.json, 2026-09-02 pass) investigated 'pedestrian' against primary sources (chess24's own account statements, ChessBase/Wikipedia match reports -- the same standard that positively resolved 'MagzyBogues', 'FantasticStar', and 'polborta') and found no primary source naming the real player. It was permanently quarantined there: 'If pedestrian were secretly one of the other 7 targets, these games would belong in a sealed target-target dyad.' That resolution covered only the 7 games below opposite MagzyBogues (Chessable Masters Semi-Finals, Day 1/2). This local audit (2026-09-10) found 'pedestrian' ALSO appears opposite GMHikaru (Chessable Masters Quarter-Finals, Day 5, 2020-06-28) in this same local corpus -- 5 further games the Kelvin2 audit's own report files (reports/ambiguous_decoy_identity_games.json, reports/decoy_resolution_categorization.json) do not mention at all. Since it is the same unverified 'pedestrian' identity, Kelvin2's own quarantine decision is extended here to cover both events.",
+      "citation": "Kelvin2 /mnt/scratch2/users/40482774/repos/amadeus-broadcast-data/configs/ambiguous_decoy_identities.json (quarantined_identities.pedestrian); local corpus files lichess_db_broadcast_2020-06.pgn, lichess_db_broadcast_2020-07.pgn",
+      "game_urls": [
+        "https://lichess.org/broadcast/chessable-masters-semi-finals-day-1/-/enmZrVwl/Xj7nfc5r",
+        "https://lichess.org/broadcast/chessable-masters-semi-finals-day-1/-/enmZrVwl/b6aL7hcB",
+        "https://lichess.org/broadcast/chessable-masters-semi-finals-day-1/-/enmZrVwl/LgaqMMCD",
+        "https://lichess.org/broadcast/chessable-masters-semi-finals-day-1/-/enmZrVwl/QJb6t6uC",
+        "https://lichess.org/broadcast/chessable-masters-semi-finals-day-1/-/enmZrVwl/2Tq3Odgx",
+        "https://lichess.org/broadcast/chessable-masters-semi-finals-day-2/-/EmbU498R/kBMRjSL6",
+        "https://lichess.org/broadcast/chessable-masters-semi-finals-day-2/-/EmbU498R/AlC6CzED",
+        "https://lichess.org/broadcast/chessable-masters-quarter-finals-day-5/-/ORCIdBPM/fMPM8Yd8",
+        "https://lichess.org/broadcast/chessable-masters-quarter-finals-day-5/-/ORCIdBPM/vX3LTAVg",
+        "https://lichess.org/broadcast/chessable-masters-quarter-finals-day-5/-/ORCIdBPM/kDLQNFsD",
+        "https://lichess.org/broadcast/chessable-masters-quarter-finals-day-5/-/ORCIdBPM/OIMLYmPy",
+        "https://lichess.org/broadcast/chessable-masters-quarter-finals-day-5/-/ORCIdBPM/iyaBja2D"
+      ]
+    },
+    {
+      "opponent_handle": "STL_So",
+      "reason": "NOT investigated or mentioned anywhere in the Kelvin2 amadeus-broadcast-data audit -- a new finding from this local pass, quarantined conservatively rather than resolved. 'STL_Nakamura' and 'STL_Caruana' are both independently verified target aliases (Kelvin2 configs/target_names.json) from what looks like a single 'St. Louis'-branded team event that assigned every participant an 'STL_<surname>' handle; 'STL_So' follows the exact same naming convention opposite 'STL_Nakamura' in the same event ('Clutch Chess', 2020-05), which is suggestive that this is really Wesley So, but this has NOT been confirmed against a primary source to the standard the Kelvin2 audit otherwise required (e.g. for MagzyBogues/FantasticStar). Quarantined rather than either added as a verified alias or left to silently enter Hikaru Nakamura's personalization data as an unverified-opponent game.",
+      "citation": "local corpus file lichess_db_broadcast_2020-05.pgn, event 'Clutch Chess Day 1'",
+      "game_urls": [
+        "https://lichess.org/broadcast/clutch-chess-day-1/-/3P0rajij/Jy1CEeky",
+        "https://lichess.org/broadcast/clutch-chess-day-1/-/3P0rajij/dMhpmEUS",
+        "https://lichess.org/broadcast/clutch-chess-day-1/-/3P0rajij/grBhzXs9",
+        "https://lichess.org/broadcast/clutch-chess-day-1/-/3P0rajij/E3pMjPZQ",
+        "https://lichess.org/broadcast/clutch-chess-day-1/-/3P0rajij/reCV9uAH",
+        "https://lichess.org/broadcast/clutch-chess-day-1/-/3P0rajij/LY5TlGV6"
+      ]
+    }
+  ]
+}
