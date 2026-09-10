@@ -10,6 +10,7 @@ from amadeus_counterpoint.encoding import (
     PROMOTION_POLICY_SIZE,
     encode_board,
     encode_history,
+    indices_to_canonical_components,
     legal_move_mask,
     move_to_policy_index,
     policy_index_to_move,
@@ -383,3 +384,61 @@ def test_move_to_policy_index_rejects_unsupported_promotion_piece():
 
     with pytest.raises(ValueError):
         move_to_policy_index(bad_move, board)
+
+
+# --- J. vectorized canonical decoding --------------------------------------
+
+_PROMOTION_TO_TYPE_INDEX = {chess.QUEEN: 0, chess.ROOK: 1, chess.BISHOP: 2, chess.KNIGHT: 3}
+
+
+def test_vectorized_decode_matches_scalar_for_every_index():
+    # White-to-move board: policy_index_to_move's mirroring step is a no-op,
+    # so its result is exactly the canonical frame indices_to_canonical_components
+    # also targets -- this is the exhaustive scalar/vectorized equivalence check.
+    board = chess.Board()
+    indices = torch.arange(POLICY_SIZE)
+
+    from_square, to_square, promotion_type = indices_to_canonical_components(indices)
+
+    for i in range(POLICY_SIZE):
+        move = policy_index_to_move(i, board)
+
+        assert from_square[i].item() == move.from_square
+        assert to_square[i].item() == move.to_square
+
+        expected_promotion = (
+            _PROMOTION_TO_TYPE_INDEX[move.promotion] if move.promotion is not None else -1
+        )
+        assert promotion_type[i].item() == expected_promotion
+
+
+def test_vectorized_decode_normal_move():
+    index = torch.tensor([chess.E2 * 64 + chess.E4])
+
+    from_square, to_square, promotion_type = indices_to_canonical_components(index)
+
+    assert from_square.item() == chess.E2
+    assert to_square.item() == chess.E4
+    assert promotion_type.item() == -1
+
+
+def test_vectorized_decode_all_four_promotion_types():
+    # Same indices as test_promotion_index_queen/rook/bishop/knight (e7e8=Q/R/B/N).
+    base = 4096 + 4 * 32 + 4 * 4
+    indices = torch.tensor([base + 0, base + 1, base + 2, base + 3])
+
+    from_square, to_square, promotion_type = indices_to_canonical_components(indices)
+
+    assert torch.equal(from_square, torch.full((4,), chess.E7))
+    assert torch.equal(to_square, torch.full((4,), chess.E8))
+    assert promotion_type.tolist() == [0, 1, 2, 3]
+
+
+def test_vectorized_decode_preserves_arbitrary_input_shape():
+    indices = torch.arange(POLICY_SIZE).reshape(4, 2, -1)
+
+    from_square, to_square, promotion_type = indices_to_canonical_components(indices)
+
+    assert from_square.shape == indices.shape
+    assert to_square.shape == indices.shape
+    assert promotion_type.shape == indices.shape

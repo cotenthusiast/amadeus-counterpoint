@@ -59,10 +59,16 @@ class Chessformer(nn.Module):
         self.policy_head = PolicyHead(d_model, head_hid_dim)
         self.value_head = ValueHead(d_model, head_hid_dim)
 
-    def forward(self, x, player_elo, opponent_elo):
+    def forward(self, x, player_elo, opponent_elo, player_emb_override=None):
+        """When provided, player_emb_override replaces the mover's
+        interpolate_elo(player_elo) embedding. Opponent conditioning always
+        uses interpolate_elo(opponent_elo)."""
 
         # turn Elo numbers into learned skill representations
-        player_emb = self.interpolate_elo(player_elo)      # B --> B, elo_dim
+        if player_emb_override is None:
+            player_emb = self.interpolate_elo(player_elo)  # B --> B, elo_dim
+        else:
+            player_emb = player_emb_override                # B, elo_dim
         opponent_emb = self.interpolate_elo(opponent_elo)  # B --> B, elo_dim
 
         # give the same global Elo context to every square

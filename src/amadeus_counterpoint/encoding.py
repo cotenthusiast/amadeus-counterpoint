@@ -106,28 +106,92 @@ def move_to_policy_index(move: chess.Move, board: chess.Board) -> int:
     return canonical.from_square * 64 + canonical.to_square
 
 
+def _decode_canonical(index: int) -> chess.Move:
+    """Pure `index -> canonical-frame chess.Move` decode -- no board/turn input.
+
+    This is the side-to-move-as-White frame `encode_board` and
+    `indices_to_canonical_components` also use, i.e. it is exactly
+    `policy_index_to_move`'s result before that function's final
+    board.turn-dependent mirroring step. Factored out so the scalar and
+    vectorized decoders share one documented source of truth for the
+    4096+256 index layout, even though the vectorized path is a separate
+    tensor implementation of the same arithmetic (see
+    `indices_to_canonical_components`'s docstring).
+    """
+    if not (0 <= index < POLICY_SIZE):
+        raise ValueError(f"policy index {index} out of range [0, {POLICY_SIZE})")
+
+    if index < BASE_POLICY_SIZE:
+        return chess.Move(from_square=index // 64, to_square=index % 64)
+
+    promo_index = index - BASE_POLICY_SIZE
+    from_file, remainder = divmod(promo_index, 32)
+    to_file, piece_index = divmod(remainder, 4)
+    return chess.Move(
+        from_square=chess.square(from_file, 6),
+        to_square=chess.square(to_file, 7),
+        promotion=_INDEX_TO_PROMOTION_PIECE[piece_index],
+    )
+
+
 def policy_index_to_move(index: int, board: chess.Board) -> chess.Move:
     """Inverse of `move_to_policy_index`: decode an index into `board`'s perspective.
 
     The decoded move is not guaranteed to be legal; legality is the caller's
     responsibility (see `legal_move_mask`). `board` is not mutated.
     """
-    if not (0 <= index < POLICY_SIZE):
-        raise ValueError(f"policy index {index} out of range [0, {POLICY_SIZE})")
-
-    if index < BASE_POLICY_SIZE:
-        canonical = chess.Move(from_square=index // 64, to_square=index % 64)
-    else:
-        promo_index = index - BASE_POLICY_SIZE
-        from_file, remainder = divmod(promo_index, 32)
-        to_file, piece_index = divmod(remainder, 4)
-        canonical = chess.Move(
-            from_square=chess.square(from_file, 6),
-            to_square=chess.square(to_file, 7),
-            promotion=_INDEX_TO_PROMOTION_PIECE[piece_index],
-        )
-
+    canonical = _decode_canonical(index)
     return canonical if board.turn == chess.WHITE else _mirror_move(canonical)
+
+
+def indices_to_canonical_components(
+    indices: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Vectorized, board/turn-agnostic decode of policy indices.
+
+    Batched tensor counterpart to `_decode_canonical`: same canonical
+    (side-to-move-as-White) frame, same 4096+256 index layout, no board.turn
+    mirroring step (candidates for the style-residual CNN are already in
+    this canonical frame, matching `encode_board`'s convention). This is a
+    separate implementation from `_decode_canonical`, not a literal call
+    into it -- a per-element scalar decode building python-chess `Move`
+    objects is unsuitable for a batched training/generation path over
+    `[B, K']` candidate tensors. The two are kept from drifting apart by an
+    exhaustive equivalence test over all `POLICY_SIZE` indices (see
+    `test_encoding.py`), run against `policy_index_to_move` itself with a
+    White-to-move board (where mirroring is a no-op).
+
+    Args:
+        indices: integer tensor of any shape, values in [0, POLICY_SIZE).
+            Not range-validated -- callers (e.g. `select_candidates`) are
+            expected to only ever produce indices already within range.
+
+    Returns:
+        from_square, to_square: same shape as `indices`, int64, each in [0, 64).
+        promotion_type: same shape as `indices`, int64, in {0,1,2,3} for
+            {QUEEN,ROOK,BISHOP,KNIGHT} (matching `_PROMOTION_PIECE_TO_INDEX`),
+            or -1 for a non-promotion index.
+    """
+    indices = indices.long()
+    is_promo = indices >= BASE_POLICY_SIZE
+
+    base_from = indices // 64
+    base_to = indices % 64
+
+    promo_index = (indices - BASE_POLICY_SIZE).clamp(min=0)
+    from_file = promo_index // 32
+    remainder = promo_index % 32
+    to_file = remainder // 4
+    piece_index = remainder % 4
+
+    promo_from = 6 * 8 + from_file  # chess.square(from_file, 6)
+    promo_to = 7 * 8 + to_file      # chess.square(to_file, 7)
+
+    from_square = torch.where(is_promo, promo_from, base_from)
+    to_square = torch.where(is_promo, promo_to, base_to)
+    promotion_type = torch.where(is_promo, piece_index, torch.full_like(indices, -1))
+
+    return from_square, to_square, promotion_type
 
 
 def legal_move_mask(board: chess.Board) -> torch.Tensor:
