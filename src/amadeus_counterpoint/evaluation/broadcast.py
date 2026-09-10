@@ -23,12 +23,17 @@ def load_manifest(path: str | Path) -> pa.Table:
         The manifest as a table, in its original row order.
 
     Raises:
-        ValueError: If the manifest has no `game_id` column.
+        ValueError: If the manifest has no `game_id` column or contains duplicate
+            `game_id` values.
     """
     manifest = pq.read_table(path)
 
     if "game_id" not in manifest.column_names:
         raise ValueError(f"Manifest {path} has no 'game_id' column")
+
+    game_ids = manifest.column("game_id").to_pylist()
+    if len(game_ids) != len(set(game_ids)):
+        raise ValueError(f"Manifest {path} has duplicate game_id values")
 
     return manifest
 

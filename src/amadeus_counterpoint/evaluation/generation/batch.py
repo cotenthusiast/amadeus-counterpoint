@@ -5,7 +5,7 @@ while preserving the semantics of single-game generation.
 import chess
 import torch
 
-from amadeus_counterpoint.chess import create_board, check_end
+from amadeus_counterpoint.chess import check_end, create_board
 from amadeus_counterpoint.encoding import (
     encode_history,
     legal_move_mask,
@@ -25,6 +25,7 @@ class _GameState:
         self.moves = []
         self.generator = torch.Generator().manual_seed(seed)
         self.result = None
+        self.censored = False
 
 
 def play_games(model, white_elos, black_elos, seeds):
@@ -43,8 +44,15 @@ def play_games(model, white_elos, black_elos, seeds):
 
     Returns a list of game records, one per input game, in input order, each
     shaped like `single.play_game`'s return value (`white_elo`, `black_elo`,
-    `result`, `moves`).
+    `result`, `censored`, `moves`). Capped games have `result=None` and
+    `censored=True`.
     """
+    lengths = (len(white_elos), len(black_elos), len(seeds))
+    if len(set(lengths)) != 1:
+        raise ValueError(
+            "white_elos, black_elos, and seeds must have equal lengths"
+        )
+
     model.eval()
 
     games = [
@@ -56,18 +64,20 @@ def play_games(model, white_elos, black_elos, seeds):
         # 1 & 2. finalize any game that has just reached normal termination
         # or the 500-ply cap; already-finished games are left untouched.
         for game in games:
-            if game.result is not None:
+            if game.result is not None or game.censored:
                 continue
 
             outcome = check_end(game.board)
             if outcome is not None:
                 game.result = outcome.result()
             elif len(game.moves) >= MAX_PLIES:
-                # See single.play_game: no adjudicated result is defined yet
-                # for ply-cap truncation; left as an open placeholder.
-                game.result = ""
+                # A ply-cap truncation is not an adjudicated draw.
+                game.censored = True
 
-        active = [game for game in games if game.result is None]
+        active = [
+            game for game in games
+            if game.result is None and not game.censored
+        ]
         if not active:
             break
 
@@ -86,8 +96,8 @@ def play_games(model, white_elos, black_elos, seeds):
         x = torch.stack([encode_history(game.history) for game in active])
 
         # 5. Elo -> tensors
-        player_elo_t = torch.tensor(player_elos, dtype=torch.long)
-        opponent_elo_t = torch.tensor(opponent_elos, dtype=torch.long)
+        player_elo_t = torch.tensor(player_elos, dtype=torch.float32)
+        opponent_elo_t = torch.tensor(opponent_elos, dtype=torch.float32)
 
         # 6. one batched inference call for every active game
         with torch.no_grad():
@@ -116,6 +126,7 @@ def play_games(model, white_elos, black_elos, seeds):
             "white_elo": game.white_elo,
             "black_elo": game.black_elo,
             "result": game.result,
+            "censored": game.censored,
             "moves": game.moves,
         }
         for game in games

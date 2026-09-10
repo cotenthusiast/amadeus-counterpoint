@@ -5,7 +5,7 @@ existing chess/model/encoding primitives.
 import chess
 import torch
 
-from amadeus_counterpoint.chess import create_board, check_end
+from amadeus_counterpoint.chess import check_end, create_board
 from amadeus_counterpoint.encoding import (
     encode_history,
     legal_move_mask,
@@ -20,9 +20,9 @@ def play_game(model, white_elo, black_elo, seed):
 
     `model` is run in eval mode under `torch.no_grad()`; sampling is driven
     by a `torch.Generator` seeded with `seed`, so the same inputs reproduce
-    the same game. Returns a dict shaped like `preprocess.GameRecord`
-    (`white_elo`, `black_elo`, `result`, `moves`), minus `eligible_ply_count`,
-    which only applies to human-game preprocessing.
+    the same game. Returns `white_elo`, `black_elo`, `result`, `censored`,
+    and `moves`; capped games have `result=None` and `censored=True` rather
+    than an adjudicated result.
     """
     model.eval()
 
@@ -33,6 +33,7 @@ def play_game(model, white_elo, black_elo, seed):
     generator = torch.Generator().manual_seed(seed)
 
     result = None
+    censored = False
 
     while True:
         # 1. normal chess termination?
@@ -43,9 +44,8 @@ def play_game(model, white_elo, black_elo, seed):
 
         # 2. 500 ply?
         if len(moves) >= MAX_PLIES:
-            # No adjudicated result is defined yet for ply-cap truncation;
-            # left as an open placeholder (tracked separately).
-            result = ""
+            # A ply-cap truncation is not an adjudicated draw.
+            censored = True
             break
 
         # 3. who is actually moving?
@@ -60,8 +60,8 @@ def play_game(model, white_elo, black_elo, seed):
         x = encode_history(history).unsqueeze(0)
 
         # 5. Elo -> tensors
-        player_elo_t = torch.tensor([player_elo], dtype=torch.long)
-        opponent_elo_t = torch.tensor([opponent_elo], dtype=torch.long)
+        player_elo_t = torch.tensor([player_elo], dtype=torch.float32)
+        opponent_elo_t = torch.tensor([opponent_elo], dtype=torch.float32)
 
         # 6. inference
         with torch.no_grad():
@@ -95,5 +95,6 @@ def play_game(model, white_elo, black_elo, seed):
         "white_elo": white_elo,
         "black_elo": black_elo,
         "result": result,
+        "censored": censored,
         "moves": moves,
     }
