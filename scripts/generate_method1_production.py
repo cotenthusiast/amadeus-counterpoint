@@ -26,6 +26,14 @@ skips which (dyad, condition, orientation) iterations run -- the seed/
 metadata/output path for any cell that DOES run are computed exactly the
 same way as in the unfiltered grid, so one filtered invocation for a cell
 produces byte-identical output to that cell running inside the full loop.
+
+Games are generated through the batched path (generate_method1_cell_batched),
+internally chunked to --generation-batch-size games active on the GPU at
+once (default 128). Chunking only changes how many games one batched model
+call advances at a time -- the full per-cell seed list is still derived up
+front from the global game_index exactly as an unchunked run would, so a
+cell's output (games, seeds, metadata) does not depend on the chosen
+--generation-batch-size.
 """
 
 import argparse
@@ -40,7 +48,11 @@ from amadeus_counterpoint.data.sealed_dyads import A_WHITE, dyad_key
 from amadeus_counterpoint.evaluation.generation.checkpoint_loading import (
     load_method1_wrapper_for_generation,
 )
-from amadeus_counterpoint.evaluation.generation.experiment import CONDITIONS, ORIENTATIONS, generate_method1_cell
+from amadeus_counterpoint.evaluation.generation.experiment import (
+    CONDITIONS,
+    ORIENTATIONS,
+    generate_method1_cell_batched,
+)
 from amadeus_counterpoint.evaluation.generation.production import cell_is_complete, write_cell
 from amadeus_counterpoint.models.chessformer import Chessformer
 
@@ -59,6 +71,7 @@ RAW_INPUT_DIM = 96
 DROPOUT = 0.0
 
 PRODUCTION_GAMES_PER_ORIENTATION = 5000
+PRODUCTION_GENERATION_BATCH_SIZE = 128
 
 
 def build_base(checkpoint_path, device) -> Chessformer:
@@ -87,6 +100,11 @@ def main():
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--root-seed", type=int, required=True)
     parser.add_argument("--games-per-orientation", type=int, default=PRODUCTION_GAMES_PER_ORIENTATION)
+    parser.add_argument(
+        "--generation-batch-size", type=int, default=PRODUCTION_GENERATION_BATCH_SIZE,
+        help="Max games active on the GPU at once per cell (internal chunking of "
+        "--games-per-orientation; does not change seeds/metadata/output). Default: 128.",
+    )
     parser.add_argument("--checkpoint-identity", type=str, required=True)
     parser.add_argument("--protocol-version", type=str, required=True)
     parser.add_argument("--code-commit", type=str, required=True)
@@ -163,10 +181,11 @@ def main():
                     print(f"skip (already complete): method1 {dyad} {condition} {orientation}")
                     continue
 
-                games = generate_method1_cell(
+                games = generate_method1_cell_batched(
                     wrapper_a, wrapper_b, base, a_color, condition,
                     elo_a, elo_b, dyad, args.games_per_orientation,
                     args.root_seed, args.checkpoint_identity,
+                    chunk_size=args.generation_batch_size,
                 )
                 path = write_cell(
                     args.output_root, "method1", dyad, condition, orientation, games, metadata

@@ -151,6 +151,7 @@ def generate_method1_cell_batched(
     n_games: int,
     root_seed: int,
     checkpoint_identity: str,
+    chunk_size: int | None = None,
 ) -> list[dict]:
     """Batched version of generate_method1_cell: identical seed derivation
     (same derive_seed call, same args, same game_index order) and identical
@@ -161,6 +162,16 @@ def generate_method1_cell_batched(
     single-game path at the same seed due to floating-point differences
     between batched and single-example inference (expected, not a bug --
     see evaluation.generation.batch's docstring).
+
+    `chunk_size` caps how many games are active on the GPU at once: the full
+    seed list is still derived up front exactly as when chunk_size is None
+    (same derive_seed calls, same game_index order, same seeds), and the
+    games are generated in successive chunks of at most `chunk_size` (the
+    last chunk may be smaller), concatenated in order. game_index/seed/
+    metadata for every game are therefore identical to the unchunked call --
+    chunking only changes how many games one batched model call advances at
+    once, never which seed a given global game_index gets. Default None =
+    one chunk covering all n_games (previous, unchunked behavior).
     """
     orientation = A_WHITE if a_color == chess.WHITE else B_WHITE
     b_color = chess.BLACK if a_color == chess.WHITE else chess.WHITE
@@ -173,22 +184,39 @@ def generate_method1_cell_batched(
         for game_index in range(n_games)
     ]
 
+    if n_games == 0:
+        return []
+
     if condition == "GG":
-        white_elo = elo_a if a_color == chess.WHITE else elo_b
-        black_elo = elo_b if a_color == chess.WHITE else elo_a
-        raw_games = batch.play_games(base, [white_elo] * n_games, [black_elo] * n_games, seeds)
         a_repr, b_repr = GENERIC_REPRESENTATION_IDENTITY, GENERIC_REPRESENTATION_IDENTITY
     elif condition == "AG":
-        raw_games = play_games_method1(wrapper_a, a_color, opponent_elos=[elo_b] * n_games, seeds=seeds)
         a_repr, b_repr = wrapper_a.identity, GENERIC_REPRESENTATION_IDENTITY
     elif condition == "GB":
-        raw_games = play_games_method1(wrapper_b, b_color, opponent_elos=[elo_a] * n_games, seeds=seeds)
         a_repr, b_repr = GENERIC_REPRESENTATION_IDENTITY, wrapper_b.identity
     else:  # AB
-        raw_games = play_games_method1_ab(wrapper_a, wrapper_b, a_color, seeds=seeds)
         a_repr, b_repr = wrapper_a.identity, wrapper_b.identity
 
     white_repr, black_repr = (a_repr, b_repr) if a_color == chess.WHITE else (b_repr, a_repr)
+
+    if chunk_size is not None and chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    effective_chunk_size = chunk_size if chunk_size else n_games
+
+    raw_games = []
+    for start in range(0, n_games, effective_chunk_size):
+        chunk_seeds = seeds[start:start + effective_chunk_size]
+        n_chunk = len(chunk_seeds)
+
+        if condition == "GG":
+            white_elo = elo_a if a_color == chess.WHITE else elo_b
+            black_elo = elo_b if a_color == chess.WHITE else elo_a
+            raw_games.extend(batch.play_games(base, [white_elo] * n_chunk, [black_elo] * n_chunk, chunk_seeds))
+        elif condition == "AG":
+            raw_games.extend(play_games_method1(wrapper_a, a_color, opponent_elos=[elo_b] * n_chunk, seeds=chunk_seeds))
+        elif condition == "GB":
+            raw_games.extend(play_games_method1(wrapper_b, b_color, opponent_elos=[elo_a] * n_chunk, seeds=chunk_seeds))
+        else:  # AB
+            raw_games.extend(play_games_method1_ab(wrapper_a, wrapper_b, a_color, seeds=chunk_seeds))
 
     return [
         _game_record(
@@ -337,11 +365,17 @@ def generate_method2_cell_batched(
     n_games: int,
     root_seed: int,
     checkpoint_identity: str,
+    chunk_size: int | None = None,
 ) -> list[dict]:
     """Batched version of generate_method2_cell -- see
     generate_method1_cell_batched's docstring; identical seed derivation and
     game_record assembly, routed through the batched play_games_*/
     batch.play_games functions for throughput.
+
+    `chunk_size` behaves exactly as in generate_method1_cell_batched: caps
+    how many games are active on the GPU at once, without changing which
+    seed any global game_index gets. Default None = one chunk of all
+    n_games (previous, unchunked behavior).
     """
     orientation = A_WHITE if a_color == chess.WHITE else B_WHITE
     b_color = chess.BLACK if a_color == chess.WHITE else chess.WHITE
@@ -354,31 +388,48 @@ def generate_method2_cell_batched(
         for game_index in range(n_games)
     ]
 
+    if n_games == 0:
+        return []
+
     if condition == "GG":
-        white_elo = elo_a if a_color == chess.WHITE else elo_b
-        black_elo = elo_b if a_color == chess.WHITE else elo_a
-        raw_games = batch.play_games(base, [white_elo] * n_games, [black_elo] * n_games, seeds)
         a_repr, b_repr = GENERIC_REPRESENTATION_IDENTITY, GENERIC_REPRESENTATION_IDENTITY
     elif condition == "AG":
-        raw_games = play_games_method2(
-            base, cnn, table, residual, player_id=player_id_a, player_color=a_color,
-            player_elo=elo_a, opponent_elos=[elo_b] * n_games, k=k, seeds=seeds,
-        )
         a_repr, b_repr = str(player_id_a), GENERIC_REPRESENTATION_IDENTITY
     elif condition == "GB":
-        raw_games = play_games_method2(
-            base, cnn, table, residual, player_id=player_id_b, player_color=b_color,
-            player_elo=elo_b, opponent_elos=[elo_a] * n_games, k=k, seeds=seeds,
-        )
         a_repr, b_repr = GENERIC_REPRESENTATION_IDENTITY, str(player_id_b)
     else:  # AB
-        raw_games = play_games_method2_ab(
-            base, cnn, table, residual, player_id_a=player_id_a, player_id_b=player_id_b,
-            a_color=a_color, elo_a=elo_a, elo_b=elo_b, k=k, seeds=seeds,
-        )
         a_repr, b_repr = str(player_id_a), str(player_id_b)
 
     white_repr, black_repr = (a_repr, b_repr) if a_color == chess.WHITE else (b_repr, a_repr)
+
+    if chunk_size is not None and chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    effective_chunk_size = chunk_size if chunk_size else n_games
+
+    raw_games = []
+    for start in range(0, n_games, effective_chunk_size):
+        chunk_seeds = seeds[start:start + effective_chunk_size]
+        n_chunk = len(chunk_seeds)
+
+        if condition == "GG":
+            white_elo = elo_a if a_color == chess.WHITE else elo_b
+            black_elo = elo_b if a_color == chess.WHITE else elo_a
+            raw_games.extend(batch.play_games(base, [white_elo] * n_chunk, [black_elo] * n_chunk, chunk_seeds))
+        elif condition == "AG":
+            raw_games.extend(play_games_method2(
+                base, cnn, table, residual, player_id=player_id_a, player_color=a_color,
+                player_elo=elo_a, opponent_elos=[elo_b] * n_chunk, k=k, seeds=chunk_seeds,
+            ))
+        elif condition == "GB":
+            raw_games.extend(play_games_method2(
+                base, cnn, table, residual, player_id=player_id_b, player_color=b_color,
+                player_elo=elo_b, opponent_elos=[elo_a] * n_chunk, k=k, seeds=chunk_seeds,
+            ))
+        else:  # AB
+            raw_games.extend(play_games_method2_ab(
+                base, cnn, table, residual, player_id_a=player_id_a, player_id_b=player_id_b,
+                a_color=a_color, elo_a=elo_a, elo_b=elo_b, k=k, seeds=chunk_seeds,
+            ))
 
     return [
         _game_record(
