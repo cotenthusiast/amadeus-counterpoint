@@ -272,3 +272,140 @@ def test_ab_seeded_generation_is_reproducible():
     )
 
     assert game_a == game_b
+
+
+# --- device handling ---------------------------------------------------------
+
+
+def test_play_game_method2_follows_base_device_not_cpu_default():
+    """Regression test for a real bug found during Kelvin2 GPU generation
+    benchmarking: play_game_method2 created x/Elo/player_id tensors and the
+    legal mask with no device argument, which crashed against a
+    CUDA-resident base/style stack. `meta` reproduces the same failure
+    without needing a GPU. A full game can't complete on meta (sampling
+    needs real probability values -- meta tensors have none, so `.cpu()` on
+    one raises NotImplementedError, not the original RuntimeError), so this
+    checks the function gets PAST the forward pass, candidate selection, and
+    masking (what the fix touches) and fails only at that expected,
+    unrelated point.
+    """
+    base, cnn, table, residual = build_real_style_stack(num_players=2, style_dim=STYLE_DIM)
+    base, cnn, table, residual = (m.to("meta") for m in (base, cnn, table, residual))
+
+    try:
+        play_game_method2(
+            base, cnn, table, residual, player_id=0, player_color=chess.WHITE,
+            player_elo=1600.0, opponent_elo=1800.0, k=5, seed=1,
+        )
+        raise AssertionError("expected NotImplementedError from meta tensor sampling")
+    except NotImplementedError as e:
+        assert "meta tensor" in str(e)
+    except RuntimeError as e:
+        raise AssertionError(
+            f"device-mismatch regression: play_game_method2 raised the original "
+            f"bug's error instead of getting past the forward pass: {e}"
+        )
+
+
+def test_play_game_method2_ab_follows_base_device_not_cpu_default():
+    base, cnn, table, residual = build_real_style_stack(num_players=2, style_dim=STYLE_DIM)
+    base, cnn, table, residual = (m.to("meta") for m in (base, cnn, table, residual))
+
+    try:
+        play_game_method2_ab(
+            base, cnn, table, residual, player_id_a=0, player_id_b=1, a_color=chess.WHITE,
+            elo_a=1600.0, elo_b=1900.0, k=5, seed=1,
+        )
+        raise AssertionError("expected NotImplementedError from meta tensor sampling")
+    except NotImplementedError as e:
+        assert "meta tensor" in str(e)
+    except RuntimeError as e:
+        raise AssertionError(
+            f"device-mismatch regression: play_game_method2_ab raised the original "
+            f"bug's error instead of getting past the forward pass: {e}"
+        )
+
+
+def test_device_falls_back_to_cpu_for_a_parameterless_base():
+    """FakeBase (used elsewhere in this file) has no .parameters() --
+    _infer_device must not crash for it, and must default to CPU, which is
+    always correct since FakeBase is only ever used in CPU-only tests."""
+    from amadeus_counterpoint.evaluation.generation.method2_personalized import _infer_device
+
+    assert _infer_device(FakeBase(torch.zeros(1, 4352))) == torch.device("cpu")
+
+
+# --- batched generation --------------------------------------------------
+
+
+def test_play_games_method2_batch_size_one_matches_single_game_exactly():
+    """With exactly one active game, the batched model call is mathematically
+    identical to the single-game call, so for the same seed the two must
+    produce the exact same game."""
+    base, cnn, table, residual = build_real_style_stack(num_players=2, style_dim=STYLE_DIM)
+
+    single_game = play_game_method2(
+        base, cnn, table, residual, player_id=0, player_color=chess.WHITE,
+        player_elo=1600.0, opponent_elo=1800.0, k=3, seed=42,
+    )
+    batched_games = method2_personalized.play_games_method2(
+        base, cnn, table, residual, player_id=0, player_color=chess.WHITE,
+        player_elo=1600.0, opponent_elos=[1800.0], k=3, seeds=[42],
+    )
+
+    assert batched_games[0] == single_game
+
+
+def test_play_games_method2_each_game_legal_and_seeded_reproducible():
+    base, cnn, table, residual = build_real_style_stack(num_players=2, style_dim=STYLE_DIM)
+    opponent_elos = [1700.0, 1800.0, 1900.0]
+    seeds = [1, 2, 3]
+
+    games_a = method2_personalized.play_games_method2(
+        base, cnn, table, residual, player_id=0, player_color=chess.WHITE,
+        player_elo=1600.0, opponent_elos=opponent_elos, k=3, seeds=seeds,
+    )
+    games_b = method2_personalized.play_games_method2(
+        base, cnn, table, residual, player_id=0, player_color=chess.WHITE,
+        player_elo=1600.0, opponent_elos=opponent_elos, k=3, seeds=seeds,
+    )
+
+    assert games_a == games_b
+    for game in games_a:
+        assert len(game["moves"]) > 0
+        replay_and_check_legal(game["moves"])
+        assert set(game.keys()) == {"white_elo", "black_elo", "result", "censored", "moves"}
+
+
+def test_play_games_method2_ab_batch_size_one_matches_single_game_exactly():
+    base, cnn, table, residual = build_real_style_stack(num_players=2, style_dim=STYLE_DIM)
+
+    single_game = play_game_method2_ab(
+        base, cnn, table, residual, player_id_a=0, player_id_b=1, a_color=chess.WHITE,
+        elo_a=1600.0, elo_b=1900.0, k=3, seed=42,
+    )
+    batched_games = method2_personalized.play_games_method2_ab(
+        base, cnn, table, residual, player_id_a=0, player_id_b=1, a_color=chess.WHITE,
+        elo_a=1600.0, elo_b=1900.0, k=3, seeds=[42],
+    )
+
+    assert batched_games[0] == single_game
+
+
+def test_play_games_method2_ab_each_game_legal_and_seeded_reproducible():
+    base, cnn, table, residual = build_real_style_stack(num_players=2, style_dim=STYLE_DIM)
+    seeds = [1, 2, 3]
+
+    games_a = method2_personalized.play_games_method2_ab(
+        base, cnn, table, residual, player_id_a=0, player_id_b=1, a_color=chess.WHITE,
+        elo_a=1600.0, elo_b=1900.0, k=3, seeds=seeds,
+    )
+    games_b = method2_personalized.play_games_method2_ab(
+        base, cnn, table, residual, player_id_a=0, player_id_b=1, a_color=chess.WHITE,
+        elo_a=1600.0, elo_b=1900.0, k=3, seeds=seeds,
+    )
+
+    assert games_a == games_b
+    for game in games_a:
+        assert len(game["moves"]) > 0
+        replay_and_check_legal(game["moves"])

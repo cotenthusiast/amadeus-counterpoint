@@ -58,3 +58,49 @@ def test_play_games_batched_each_game_legal_and_independent_of_batch_position():
     # from batch position/order, exactly as batch.play_games documents.
     alone = single.play_game(model, white_elo=1700.0, black_elo=1800.0, seed=22)
     assert games[1] == alone
+
+
+# --- device handling ---------------------------------------------------------
+
+
+def test_play_game_follows_model_device_not_cpu_default():
+    """Regression test for a real bug found during Kelvin2 GPU generation
+    benchmarking: play_game created x/Elo tensors and the legal mask with no
+    device argument (implicit CPU default), which crashed against a
+    CUDA-resident model. `meta` is a real, distinct device requiring no GPU:
+    it reproduces the same "expected all tensors on the same device" failure
+    CPU-vs-CUDA did. A full game can't complete on meta (sampling needs real
+    probability values, which meta tensors don't have -- `.cpu()` on a meta
+    tensor raises NotImplementedError, not the original RuntimeError), so
+    this checks that play_game gets PAST the forward pass and masking (the
+    parts the fix touches) and fails only at that expected, unrelated point --
+    proving the device-mismatch bug itself is gone.
+    """
+    model = Chessformer(**CONFIG).to("meta")
+
+    try:
+        single.play_game(model, white_elo=1500.0, black_elo=1600.0, seed=1)
+        raise AssertionError("expected NotImplementedError from meta tensor sampling")
+    except NotImplementedError as e:
+        assert "meta tensor" in str(e)
+    except RuntimeError as e:
+        raise AssertionError(
+            f"device-mismatch regression: play_game raised the original bug's "
+            f"error instead of getting past the forward pass: {e}"
+        )
+
+
+def test_play_games_batch_follows_model_device_not_cpu_default():
+    """Same regression, for the batched player (evaluation.generation.batch)."""
+    model = Chessformer(**CONFIG).to("meta")
+
+    try:
+        batch.play_games(model, white_elos=[1500.0], black_elos=[1600.0], seeds=[1])
+        raise AssertionError("expected NotImplementedError from meta tensor sampling")
+    except NotImplementedError as e:
+        assert "meta tensor" in str(e)
+    except RuntimeError as e:
+        raise AssertionError(
+            f"device-mismatch regression: play_games raised the original bug's "
+            f"error instead of getting past the forward pass: {e}"
+        )

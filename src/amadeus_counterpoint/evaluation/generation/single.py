@@ -25,6 +25,7 @@ def play_game(model, white_elo, black_elo, seed):
     than an adjudicated result.
     """
     model.eval()
+    device = next(model.parameters()).device
 
     board = create_board()
     history = [board.copy(stack=False)]
@@ -57,18 +58,18 @@ def play_game(model, white_elo, black_elo, seed):
             opponent_elo = white_elo
 
         # 4. encode history
-        x = encode_history(history).unsqueeze(0)
+        x = encode_history(history).unsqueeze(0).to(device)
 
         # 5. Elo -> tensors
-        player_elo_t = torch.tensor([player_elo], dtype=torch.float32)
-        opponent_elo_t = torch.tensor([opponent_elo], dtype=torch.float32)
+        player_elo_t = torch.tensor([player_elo], dtype=torch.float32, device=device)
+        opponent_elo_t = torch.tensor([opponent_elo], dtype=torch.float32, device=device)
 
         # 6. inference
         with torch.no_grad():
             policy_logits, _ = model(x, player_elo_t, opponent_elo_t)
 
         # 7. legal mask
-        legal_mask = legal_move_mask(board)
+        legal_mask = legal_move_mask(board).to(device)
 
         # 8. mask logits
         policy_logits = policy_logits.squeeze(0).masked_fill(
@@ -78,8 +79,12 @@ def play_game(model, white_elo, black_elo, seed):
         # 9. softmax(T=1)
         probs = torch.softmax(policy_logits, dim=-1)
 
-        # 10. seeded sample
-        index = torch.multinomial(probs, num_samples=1, generator=generator).item()
+        # 10. seeded sample. `generator` is a plain (CPU) torch.Generator --
+        # sampling must happen on CPU to match it; a CUDA generator would
+        # use a different RNG algorithm and change which game a given seed
+        # produces, which is not a device-compatibility fix, it's a change
+        # to the existing deterministic seeding scheme.
+        index = torch.multinomial(probs.cpu(), num_samples=1, generator=generator).item()
 
         # 11. index -> move
         move = policy_index_to_move(index, board)

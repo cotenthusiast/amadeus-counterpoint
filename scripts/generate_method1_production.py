@@ -16,6 +16,16 @@ script -- it is not run as part of this implementation session.
         --root-seed 20260910 \\
         --checkpoint-identity method1-2026-09-10 \\
         --protocol-version 1 --code-commit <git-sha>
+
+Optional cell-level filtering, for independent SLURM array jobs over the
+28-dyad x 2-orientation x 4-condition grid: --only-dyad-a/--only-dyad-b
+(both, restricts to exactly that unordered pair), --only-orientation
+(A_WHITE or B_WHITE), --only-condition (GG/AG/GB/AB). Any combination may be
+supplied; omitted filters process every value as before. Filtering only
+skips which (dyad, condition, orientation) iterations run -- the seed/
+metadata/output path for any cell that DOES run are computed exactly the
+same way as in the unfiltered grid, so one filtered invocation for a cell
+produces byte-identical output to that cell running inside the full loop.
 """
 
 import argparse
@@ -81,7 +91,27 @@ def main():
     parser.add_argument("--protocol-version", type=str, required=True)
     parser.add_argument("--code-commit", type=str, required=True)
     parser.add_argument("--temperature", type=str, default="1.0")
+    parser.add_argument(
+        "--only-dyad-a", type=int, default=None,
+        help="Restrict to the one dyad containing this player_id and --only-dyad-b "
+        "(both required together). Default: process every dyad.",
+    )
+    parser.add_argument("--only-dyad-b", type=int, default=None)
+    parser.add_argument(
+        "--only-orientation", type=str, default=None, choices=ORIENTATIONS,
+        help="Restrict to one orientation. Default: process both.",
+    )
+    parser.add_argument(
+        "--only-condition", type=str, default=None, choices=CONDITIONS,
+        help="Restrict to one condition. Default: process all four.",
+    )
     args = parser.parse_args()
+
+    if (args.only_dyad_a is None) != (args.only_dyad_b is None):
+        raise SystemExit("--only-dyad-a and --only-dyad-b must be given together")
+    only_dyad = (
+        {args.only_dyad_a, args.only_dyad_b} if args.only_dyad_a is not None else None
+    )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -112,14 +142,23 @@ def main():
     }
 
     for player_id_a, player_id_b in itertools.combinations(player_ids, 2):
+        if only_dyad is not None and {player_id_a, player_id_b} != only_dyad:
+            continue
+
         dyad = dyad_key(player_id_a, player_id_b)
         wrapper_a, wrapper_b = wrappers[player_id_a], wrappers[player_id_b]
         elo_a, elo_b = representative_elos[player_id_a], representative_elos[player_id_b]
 
         for orientation in ORIENTATIONS:
+            if args.only_orientation is not None and orientation != args.only_orientation:
+                continue
+
             a_color = chess.WHITE if orientation == A_WHITE else chess.BLACK
 
             for condition in CONDITIONS:
+                if args.only_condition is not None and condition != args.only_condition:
+                    continue
+
                 if cell_is_complete(args.output_root, "method1", dyad, condition, orientation):
                     print(f"skip (already complete): method1 {dyad} {condition} {orientation}")
                     continue

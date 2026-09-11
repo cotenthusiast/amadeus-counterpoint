@@ -32,14 +32,18 @@ import itertools
 import chess
 
 from amadeus_counterpoint.data.sealed_dyads import A_WHITE, B_WHITE, dyad_key
-from amadeus_counterpoint.evaluation.generation import single
+from amadeus_counterpoint.evaluation.generation import batch, single
 from amadeus_counterpoint.evaluation.generation.method1_personalized import (
     play_game_method1,
     play_game_method1_ab,
+    play_games_method1,
+    play_games_method1_ab,
 )
 from amadeus_counterpoint.evaluation.generation.method2_personalized import (
     play_game_method2,
     play_game_method2_ab,
+    play_games_method2,
+    play_games_method2_ab,
 )
 from amadeus_counterpoint.evaluation.seeding import derive_seed
 from amadeus_counterpoint.models.chessformer import Chessformer
@@ -133,6 +137,66 @@ def generate_method1_cell(
         ))
 
     return games
+
+
+def generate_method1_cell_batched(
+    wrapper_a: PersonalizedChessformer,
+    wrapper_b: PersonalizedChessformer,
+    base: Chessformer,
+    a_color: chess.Color,
+    condition: str,
+    elo_a: float,
+    elo_b: float,
+    dyad: str,
+    n_games: int,
+    root_seed: int,
+    checkpoint_identity: str,
+) -> list[dict]:
+    """Batched version of generate_method1_cell: identical seed derivation
+    (same derive_seed call, same args, same game_index order) and identical
+    game_record/metadata assembly -- the only difference is routing through
+    the batched play_games_*/batch.play_games functions instead of looping
+    single-game calls, for throughput. A given cell produces the same set of
+    seeds either way; per-game sampled moves may differ from the
+    single-game path at the same seed due to floating-point differences
+    between batched and single-example inference (expected, not a bug --
+    see evaluation.generation.batch's docstring).
+    """
+    orientation = A_WHITE if a_color == chess.WHITE else B_WHITE
+    b_color = chess.BLACK if a_color == chess.WHITE else chess.WHITE
+
+    seeds = [
+        derive_seed(
+            root_seed=root_seed, dyad=f"method1__{dyad}", condition=condition,
+            orientation=orientation, game_index=game_index,
+        )
+        for game_index in range(n_games)
+    ]
+
+    if condition == "GG":
+        white_elo = elo_a if a_color == chess.WHITE else elo_b
+        black_elo = elo_b if a_color == chess.WHITE else elo_a
+        raw_games = batch.play_games(base, [white_elo] * n_games, [black_elo] * n_games, seeds)
+        a_repr, b_repr = GENERIC_REPRESENTATION_IDENTITY, GENERIC_REPRESENTATION_IDENTITY
+    elif condition == "AG":
+        raw_games = play_games_method1(wrapper_a, a_color, opponent_elos=[elo_b] * n_games, seeds=seeds)
+        a_repr, b_repr = wrapper_a.identity, GENERIC_REPRESENTATION_IDENTITY
+    elif condition == "GB":
+        raw_games = play_games_method1(wrapper_b, b_color, opponent_elos=[elo_a] * n_games, seeds=seeds)
+        a_repr, b_repr = GENERIC_REPRESENTATION_IDENTITY, wrapper_b.identity
+    else:  # AB
+        raw_games = play_games_method1_ab(wrapper_a, wrapper_b, a_color, seeds=seeds)
+        a_repr, b_repr = wrapper_a.identity, wrapper_b.identity
+
+    white_repr, black_repr = (a_repr, b_repr) if a_color == chess.WHITE else (b_repr, a_repr)
+
+    return [
+        _game_record(
+            game, game_index, seed, dyad, condition, orientation,
+            checkpoint_identity, white_repr, black_repr,
+        )
+        for game_index, (game, seed) in enumerate(zip(raw_games, seeds))
+    ]
 
 
 def generate_method1_experiment(
@@ -255,6 +319,74 @@ def generate_method2_cell(
         ))
 
     return games
+
+
+def generate_method2_cell_batched(
+    base: Chessformer,
+    cnn: MoveStyleCNN,
+    table: PlayerStyleTable,
+    residual: StyleResidual,
+    player_id_a: int,
+    player_id_b: int,
+    a_color: chess.Color,
+    condition: str,
+    elo_a: float,
+    elo_b: float,
+    k: int,
+    dyad: str,
+    n_games: int,
+    root_seed: int,
+    checkpoint_identity: str,
+) -> list[dict]:
+    """Batched version of generate_method2_cell -- see
+    generate_method1_cell_batched's docstring; identical seed derivation and
+    game_record assembly, routed through the batched play_games_*/
+    batch.play_games functions for throughput.
+    """
+    orientation = A_WHITE if a_color == chess.WHITE else B_WHITE
+    b_color = chess.BLACK if a_color == chess.WHITE else chess.WHITE
+
+    seeds = [
+        derive_seed(
+            root_seed=root_seed, dyad=f"method2__{dyad}", condition=condition,
+            orientation=orientation, game_index=game_index,
+        )
+        for game_index in range(n_games)
+    ]
+
+    if condition == "GG":
+        white_elo = elo_a if a_color == chess.WHITE else elo_b
+        black_elo = elo_b if a_color == chess.WHITE else elo_a
+        raw_games = batch.play_games(base, [white_elo] * n_games, [black_elo] * n_games, seeds)
+        a_repr, b_repr = GENERIC_REPRESENTATION_IDENTITY, GENERIC_REPRESENTATION_IDENTITY
+    elif condition == "AG":
+        raw_games = play_games_method2(
+            base, cnn, table, residual, player_id=player_id_a, player_color=a_color,
+            player_elo=elo_a, opponent_elos=[elo_b] * n_games, k=k, seeds=seeds,
+        )
+        a_repr, b_repr = str(player_id_a), GENERIC_REPRESENTATION_IDENTITY
+    elif condition == "GB":
+        raw_games = play_games_method2(
+            base, cnn, table, residual, player_id=player_id_b, player_color=b_color,
+            player_elo=elo_b, opponent_elos=[elo_a] * n_games, k=k, seeds=seeds,
+        )
+        a_repr, b_repr = GENERIC_REPRESENTATION_IDENTITY, str(player_id_b)
+    else:  # AB
+        raw_games = play_games_method2_ab(
+            base, cnn, table, residual, player_id_a=player_id_a, player_id_b=player_id_b,
+            a_color=a_color, elo_a=elo_a, elo_b=elo_b, k=k, seeds=seeds,
+        )
+        a_repr, b_repr = str(player_id_a), str(player_id_b)
+
+    white_repr, black_repr = (a_repr, b_repr) if a_color == chess.WHITE else (b_repr, a_repr)
+
+    return [
+        _game_record(
+            game, game_index, seed, dyad, condition, orientation,
+            checkpoint_identity, white_repr, black_repr,
+        )
+        for game_index, (game, seed) in enumerate(zip(raw_games, seeds))
+    ]
 
 
 def generate_method2_experiment(

@@ -54,6 +54,7 @@ def play_games(model, white_elos, black_elos, seeds):
         )
 
     model.eval()
+    device = next(model.parameters()).device
 
     games = [
         _GameState(white_elo, black_elo, seed)
@@ -93,11 +94,11 @@ def play_games(model, white_elos, black_elos, seeds):
                 opponent_elos.append(game.white_elo)
 
         # 4. encode each active game's history and stack into one batch
-        x = torch.stack([encode_history(game.history) for game in active])
+        x = torch.stack([encode_history(game.history) for game in active]).to(device)
 
         # 5. Elo -> tensors
-        player_elo_t = torch.tensor(player_elos, dtype=torch.float32)
-        opponent_elo_t = torch.tensor(opponent_elos, dtype=torch.float32)
+        player_elo_t = torch.tensor(player_elos, dtype=torch.float32, device=device)
+        opponent_elo_t = torch.tensor(opponent_elos, dtype=torch.float32, device=device)
 
         # 6. one batched inference call for every active game
         with torch.no_grad():
@@ -106,14 +107,18 @@ def play_games(model, white_elos, black_elos, seeds):
         # 7-13. per game: mask, softmax(T=1), sample with its own generator,
         # decode, push, and record -- identical to single.play_game.
         for game, logits in zip(active, policy_logits):
-            legal_mask = legal_move_mask(game.board)
+            legal_mask = legal_move_mask(game.board).to(device)
             logits = logits.masked_fill(
                 ~legal_mask, torch.finfo(logits.dtype).min
             )
 
+            # game.generator is a plain (CPU) torch.Generator -- sampling
+            # must happen on CPU to match it (a CUDA generator would change
+            # which game a given seed produces, not just fix a device
+            # mismatch).
             probs = torch.softmax(logits, dim=-1)
             index = torch.multinomial(
-                probs, num_samples=1, generator=game.generator
+                probs.cpu(), num_samples=1, generator=game.generator
             ).item()
             move = policy_index_to_move(index, game.board)
 

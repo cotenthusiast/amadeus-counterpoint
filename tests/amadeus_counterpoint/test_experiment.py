@@ -304,3 +304,103 @@ def test_generate_method2_cell_matches_the_corresponding_slice_of_the_full_exper
 
     expected = [g for g in full if g["condition"] == "AB" and g["orientation"] == "A_WHITE"]
     assert one_cell == expected
+
+
+# --- batched cell generation: metadata/protocol equivalence -----------------
+
+
+from amadeus_counterpoint.evaluation.generation.experiment import (  # noqa: E402
+    CONDITIONS,
+    generate_method1_cell_batched,
+    generate_method2_cell_batched,
+)
+
+_METADATA_FIELDS = [
+    "game_index", "seed", "dyad", "condition", "orientation",
+    "white_elo", "black_elo", "checkpoint_identity",
+    "white_representation_identity", "black_representation_identity",
+]
+
+
+def test_method1_batched_cell_metadata_matches_single_loop_cell_for_every_condition():
+    """Same seeds/dyad/condition/orientation/representation-identities/Elo
+    metadata as the existing single-game loop, for every condition --
+    moves/result/censored are excluded from this comparison since batched
+    floating-point inference may sample differently at the same seed
+    (expected, documented, not a protocol violation)."""
+    wrappers, base, elos = build_method1_fixture()
+
+    for condition in CONDITIONS:
+        single_games = generate_method1_cell(
+            wrappers[0], wrappers[1], base, chess.WHITE, condition,
+            elos[0], elos[1], "p0__p1", n_games=3, root_seed=999, checkpoint_identity="test",
+        )
+        batched_games = generate_method1_cell_batched(
+            wrappers[0], wrappers[1], base, chess.WHITE, condition,
+            elos[0], elos[1], "p0__p1", n_games=3, root_seed=999, checkpoint_identity="test",
+        )
+
+        assert len(single_games) == len(batched_games) == 3
+        for s, b in zip(single_games, batched_games):
+            for field in _METADATA_FIELDS:
+                assert s[field] == b[field], f"{condition} {field}: {s[field]!r} != {b[field]!r}"
+            # censored games are never draws, in both paths
+            if s["censored"]:
+                assert s["result"] is None
+            if b["censored"]:
+                assert b["result"] is None
+
+
+def test_method2_batched_cell_metadata_matches_single_loop_cell_for_every_condition():
+    base, cnn, table, residual, elos = build_method2_fixture()
+
+    for condition in CONDITIONS:
+        single_games = generate_method2_cell(
+            base, cnn, table, residual, 0, 1, chess.WHITE, condition,
+            elos[0], elos[1], k=3, dyad="0__1", n_games=3, root_seed=999, checkpoint_identity="test",
+        )
+        batched_games = generate_method2_cell_batched(
+            base, cnn, table, residual, 0, 1, chess.WHITE, condition,
+            elos[0], elos[1], k=3, dyad="0__1", n_games=3, root_seed=999, checkpoint_identity="test",
+        )
+
+        assert len(single_games) == len(batched_games) == 3
+        for s, b in zip(single_games, batched_games):
+            for field in _METADATA_FIELDS:
+                assert s[field] == b[field], f"{condition} {field}: {s[field]!r} != {b[field]!r}"
+            if s["censored"]:
+                assert s["result"] is None
+            if b["censored"]:
+                assert b["result"] is None
+
+
+def test_method1_batched_cell_deterministic_reproducibility():
+    """Same batched invocation, same seeds, twice -> identical output
+    (including moves/result), not just legal games."""
+    wrappers, base, elos = build_method1_fixture()
+
+    games_a = generate_method1_cell_batched(
+        wrappers[0], wrappers[1], base, chess.WHITE, "AB",
+        elos[0], elos[1], "p0__p1", n_games=4, root_seed=777, checkpoint_identity="test",
+    )
+    games_b = generate_method1_cell_batched(
+        wrappers[0], wrappers[1], base, chess.WHITE, "AB",
+        elos[0], elos[1], "p0__p1", n_games=4, root_seed=777, checkpoint_identity="test",
+    )
+
+    assert games_a == games_b
+
+
+def test_method2_batched_cell_deterministic_reproducibility():
+    base, cnn, table, residual, elos = build_method2_fixture()
+
+    games_a = generate_method2_cell_batched(
+        base, cnn, table, residual, 0, 1, chess.WHITE, "AB",
+        elos[0], elos[1], k=3, dyad="0__1", n_games=4, root_seed=777, checkpoint_identity="test",
+    )
+    games_b = generate_method2_cell_batched(
+        base, cnn, table, residual, 0, 1, chess.WHITE, "AB",
+        elos[0], elos[1], k=3, dyad="0__1", n_games=4, root_seed=777, checkpoint_identity="test",
+    )
+
+    assert games_a == games_b

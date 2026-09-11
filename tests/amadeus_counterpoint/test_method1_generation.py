@@ -186,3 +186,110 @@ def test_ab_identity_z_players_reproduce_ordinary_generation_exactly():
     ordinary = single.play_game(base, white_elo=1600.0, black_elo=1800.0, seed=42)
 
     assert personalized == ordinary
+
+
+# --- device handling ---------------------------------------------------------
+
+
+def test_play_game_method1_follows_wrapper_device_not_cpu_default():
+    """Regression test for a real bug found during Kelvin2 GPU generation
+    benchmarking: play_game_method1 created x/Elo tensors and the legal mask
+    with no device argument, which crashed against a CUDA-resident wrapper.
+    `meta` reproduces the same failure without needing a GPU. A full game
+    can't complete on meta (sampling needs real probability values -- meta
+    tensors have none, so `.cpu()` on one raises NotImplementedError, not the
+    original RuntimeError), so this checks the function gets PAST the
+    forward pass and masking (what the fix touches) and fails only at that
+    expected, unrelated point.
+    """
+    base = Chessformer(**CONFIG).to("meta")
+    wrapper = PersonalizedChessformer(base, nominal_elo=1600.0, identity="test-player")
+
+    try:
+        play_game_method1(wrapper, chess.WHITE, opponent_elo=1800.0, seed=1)
+        raise AssertionError("expected NotImplementedError from meta tensor sampling")
+    except NotImplementedError as e:
+        assert "meta tensor" in str(e)
+    except RuntimeError as e:
+        raise AssertionError(
+            f"device-mismatch regression: play_game_method1 raised the original "
+            f"bug's error instead of getting past the forward pass: {e}"
+        )
+
+
+def test_play_game_method1_ab_follows_wrapper_device_not_cpu_default():
+    base = Chessformer(**CONFIG).to("meta")
+    wrapper_a = PersonalizedChessformer(base, nominal_elo=1600.0, identity="A")
+    wrapper_b = PersonalizedChessformer(base, nominal_elo=1900.0, identity="B")
+
+    try:
+        play_game_method1_ab(wrapper_a, wrapper_b, chess.WHITE, seed=1)
+        raise AssertionError("expected NotImplementedError from meta tensor sampling")
+    except NotImplementedError as e:
+        assert "meta tensor" in str(e)
+    except RuntimeError as e:
+        raise AssertionError(
+            f"device-mismatch regression: play_game_method1_ab raised the original "
+            f"bug's error instead of getting past the forward pass: {e}"
+        )
+
+
+# --- batched generation --------------------------------------------------
+
+
+def test_play_games_method1_batch_size_one_matches_single_game_exactly():
+    """The strongest correctness check for the batched path: with exactly
+    one active game, the batched model call is mathematically identical to
+    the single-game call (same [1, ...] tensor either way), so for the same
+    seed the two must produce the EXACT same game, not just a legal one."""
+    wrapper = build_wrapper(nominal_elo=1600.0)
+
+    single_game = play_game_method1(wrapper, chess.WHITE, opponent_elo=1800.0, seed=42)
+    batched_games = method1_personalized.play_games_method1(
+        wrapper, chess.WHITE, opponent_elos=[1800.0], seeds=[42]
+    )
+
+    assert batched_games[0] == single_game
+
+
+def test_play_games_method1_each_game_legal_and_seeded_reproducible():
+    wrapper = build_wrapper(nominal_elo=1600.0)
+    opponent_elos = [1700.0, 1800.0, 1900.0]
+    seeds = [1, 2, 3]
+
+    games_a = method1_personalized.play_games_method1(wrapper, chess.WHITE, opponent_elos, seeds)
+    games_b = method1_personalized.play_games_method1(wrapper, chess.WHITE, opponent_elos, seeds)
+
+    assert games_a == games_b  # same batched invocation, same seeds -> identical output
+    for game in games_a:
+        assert len(game["moves"]) > 0
+        replay_and_check_legal(game["moves"])
+        assert set(game.keys()) == {"white_elo", "black_elo", "result", "censored", "moves"}
+
+
+def test_play_games_method1_ab_batch_size_one_matches_single_game_exactly():
+    base = Chessformer(**CONFIG)
+    wrapper_a = PersonalizedChessformer(base, nominal_elo=1600.0, identity="A")
+    wrapper_b = PersonalizedChessformer(base, nominal_elo=1900.0, identity="B")
+
+    single_game = play_game_method1_ab(wrapper_a, wrapper_b, chess.WHITE, seed=42)
+    batched_games = method1_personalized.play_games_method1_ab(
+        wrapper_a, wrapper_b, chess.WHITE, seeds=[42]
+    )
+
+    assert batched_games[0] == single_game
+
+
+def test_play_games_method1_ab_each_game_legal_and_seeded_reproducible():
+    base = Chessformer(**CONFIG)
+    wrapper_a = PersonalizedChessformer(base, nominal_elo=1600.0, identity="A")
+    wrapper_b = PersonalizedChessformer(base, nominal_elo=1900.0, identity="B")
+    seeds = [1, 2, 3]
+
+    games_a = method1_personalized.play_games_method1_ab(wrapper_a, wrapper_b, chess.WHITE, seeds)
+    games_b = method1_personalized.play_games_method1_ab(wrapper_a, wrapper_b, chess.WHITE, seeds)
+
+    assert games_a == games_b
+    for game in games_a:
+        assert len(game["moves"]) > 0
+        replay_and_check_legal(game["moves"])
