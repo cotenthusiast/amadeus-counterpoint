@@ -406,6 +406,61 @@ class _FakeChessEngine:
         return {"score": ce.PovScore(ce.Cp(self.scores_by_fen[key]), chess.WHITE)}
 
 
+class _FakePyPool:
+    """Stand-in for multiprocessing.pool.Pool: records which of map/starmap
+    was actually called and with what, without spawning a real process --
+    catches exactly the class of bug where `evaluate_many` builds tasks
+    shaped for one calling convention but invokes the other (a real bug
+    found via the cluster reference-equivalence run against a REAL engine
+    pool -- FakeEnginePool in this file bypasses StockfishEnginePool
+    entirely and could never have caught it)."""
+
+    def __init__(self, *a, **kw):
+        self.map_calls = []
+        self.starmap_calls = []
+
+    def map(self, func, iterable):
+        items = list(iterable)
+        self.map_calls.append((func, items))
+        return [func(item) for item in items]
+
+    def starmap(self, func, iterable):
+        items = list(iterable)
+        self.starmap_calls.append((func, items))
+        return [func(*item) for item in items]
+
+    def close(self):
+        pass
+
+    def join(self):
+        pass
+
+
+def test_evaluate_many_uses_map_not_starmap_with_correctly_shaped_tasks(monkeypatch):
+    fake_pool = _FakePyPool()
+    monkeypatch.setattr(guarded_generation._SPAWN_CTX, "Pool", lambda *a, **kw: fake_pool)
+    monkeypatch.setattr(guarded_generation, "_pool_worker_init", lambda *a, **kw: None)
+
+    pool = guarded_generation.StockfishEnginePool(1, "fake-stockfish-path")
+    board = create_board()
+
+    def fake_worker_eval(task):
+        fen, ucis, depth = task  # must NOT raise -- this is the real _pool_worker_eval's own signature
+        return [0.0 for _ in ucis]
+
+    monkeypatch.setattr(guarded_generation, "_pool_worker_eval", fake_worker_eval)
+    # StockfishEnginePool.evaluate_many references the module-level name directly,
+    # so re-fetch it through the pool's own call path (map receives the function object
+    # `guarded_generation._pool_worker_eval` as looked up at call time inside evaluate_many).
+    result = pool.evaluate_many([(board.fen(), ["e2e4", "d2d4"])], depth=8)
+
+    assert fake_pool.starmap_calls == [], "must not use starmap (auto-unpacks each task tuple into 3 args)"
+    assert len(fake_pool.map_calls) == 1
+    _func, items = fake_pool.map_calls[0]
+    assert items == [(board.fen(), ["e2e4", "d2d4"], 8)]  # ONE tuple per task, not pre-unpacked
+    assert result == [[0.0, 0.0]]
+
+
 def test_pool_worker_eval_mover_pov_via_real_worker_function(monkeypatch):
     """Exercises guarded_generation._pool_worker_eval directly (bypassing
     multiprocessing.Pool) with a fake engine injected into the module-level

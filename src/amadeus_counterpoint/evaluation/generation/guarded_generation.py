@@ -42,9 +42,9 @@ that thread no longer existing post-fork -- a well-documented PyTorch/
 multiprocessing interaction). These Stockfish workers never import torch
 at all, and `spawn` additionally guarantees they start as fresh
 interpreters with no inherited state from the CUDA/PyTorch generation
-process regardless. `evaluate_many` uses `pool.starmap`, which is
-blocking and ORDER-PRESERVING: results come back in the same order as the
-input tasks no matter which worker finishes first, which is what keeps
+process regardless. `evaluate_many` uses `pool.map`, which is blocking and
+ORDER-PRESERVING: results come back in the same order as the input tasks
+no matter which worker finishes first, which is what keeps
 each game's seeded `torch.Generator` draw independent of worker
 completion order/timing.
 
@@ -125,10 +125,15 @@ class StockfishEnginePool:
 
     def evaluate_many(self, tasks: list[tuple[str, list[str]]], depth: int) -> list[list[float]]:
         """`tasks`: list of (fen, candidate_ucis). Returns cheap-loss lists
-        in the SAME order as `tasks` (order-preserving `starmap`; see
-        module docstring for why this matters for reproducibility)."""
+        in the SAME order as `tasks` (order-preserving blocking `map`; see
+        module docstring for why this matters for reproducibility). `map`,
+        not `starmap`: each task is already a single (fen, ucis, depth)
+        tuple that `_pool_worker_eval` unpacks itself -- `starmap` would
+        instead auto-unpack the tuple into three separate positional
+        arguments before calling the worker, which doesn't match its
+        single-argument signature."""
         full_tasks = [(fen, ucis, depth) for fen, ucis in tasks]
-        return self._pool.starmap(_pool_worker_eval, full_tasks)
+        return self._pool.map(_pool_worker_eval, full_tasks)
 
     def close(self):
         if self._closed:
