@@ -69,6 +69,14 @@ class StrengthGuardrailConfig:
     hash_mb: int = 128
 
 
+# The single frozen production specification (rollout_quality_exploratory_
+# 2026-09-12/final_sampler_freeze/FINAL_SAMPLER_REPORT.md): K=5, Stockfish
+# 19 depth 8 cheap search, lambda=2.0. Production code and tests should
+# both reference this constant rather than re-typing the numbers, so a
+# future change to the frozen spec cannot silently drift between them.
+FROZEN_PRODUCTION_CONFIG = StrengthGuardrailConfig(lam=2.0, k=5, cheap_depth=8, threads=1, hash_mb=128)
+
+
 def strength_reweight(p_behavior: torch.Tensor, cheap_losses: torch.Tensor, lam: float) -> torch.Tensor:
     """Compute q_i = softmax(log(p_behavior_i) - lam * cheap_losses_i / 100)
     over the last dimension. `p_behavior` and `cheap_losses` may be `[K]`

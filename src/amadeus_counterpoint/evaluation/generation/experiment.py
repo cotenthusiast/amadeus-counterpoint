@@ -32,7 +32,8 @@ import itertools
 import chess
 
 from amadeus_counterpoint.data.sealed_dyads import A_WHITE, B_WHITE, dyad_key
-from amadeus_counterpoint.evaluation.generation import batch, single
+from amadeus_counterpoint.evaluation.generation import batch, guarded_generation, single
+from amadeus_counterpoint.evaluation.generation.strength_guardrail import StrengthGuardrailConfig
 from amadeus_counterpoint.evaluation.generation.method1_personalized import (
     play_game_method1,
     play_game_method1_ab,
@@ -152,6 +153,8 @@ def generate_method1_cell_batched(
     root_seed: int,
     checkpoint_identity: str,
     chunk_size: int | None = None,
+    guardrail: StrengthGuardrailConfig | None = None,
+    engine_pool=None,
 ) -> list[dict]:
     """Batched version of generate_method1_cell: identical seed derivation
     (same derive_seed call, same args, same game_index order) and identical
@@ -172,6 +175,18 @@ def generate_method1_cell_batched(
     chunking only changes how many games one batched model call advances at
     once, never which seed a given global game_index gets. Default None =
     one chunk covering all n_games (previous, unchunked behavior).
+
+    `guardrail`: optional `strength_guardrail.StrengthGuardrailConfig`. When
+    None (the default), behavior is completely unchanged from before this
+    parameter existed -- the plain unguarded `play_games_*`/`batch.play_games`
+    functions below are called exactly as always. When provided (together
+    with a live `engine_pool`, an `evaluation.generation.guarded_generation.
+    StockfishEnginePool`), every game in this cell is generated through the
+    frozen strength-aware guardrail instead (see guarded_generation.py and
+    rollout_quality_exploratory_2026-09-12/final_sampler_freeze/
+    FINAL_SAMPLER_REPORT.md) -- seed derivation, chunking, and game-record
+    assembly below are identical either way; only the move-selection
+    mechanism inside each chunk's generation call changes.
     """
     orientation = A_WHITE if a_color == chess.WHITE else B_WHITE
     b_color = chess.BLACK if a_color == chess.WHITE else chess.WHITE
@@ -202,21 +217,44 @@ def generate_method1_cell_batched(
         raise ValueError("chunk_size must be positive")
     effective_chunk_size = chunk_size if chunk_size else n_games
 
+    if (guardrail is None) != (engine_pool is None):
+        raise ValueError("guardrail and engine_pool must be supplied together (both or neither)")
+
     raw_games = []
     for start in range(0, n_games, effective_chunk_size):
         chunk_seeds = seeds[start:start + effective_chunk_size]
         n_chunk = len(chunk_seeds)
 
-        if condition == "GG":
-            white_elo = elo_a if a_color == chess.WHITE else elo_b
-            black_elo = elo_b if a_color == chess.WHITE else elo_a
-            raw_games.extend(batch.play_games(base, [white_elo] * n_chunk, [black_elo] * n_chunk, chunk_seeds))
-        elif condition == "AG":
-            raw_games.extend(play_games_method1(wrapper_a, a_color, opponent_elos=[elo_b] * n_chunk, seeds=chunk_seeds))
-        elif condition == "GB":
-            raw_games.extend(play_games_method1(wrapper_b, b_color, opponent_elos=[elo_a] * n_chunk, seeds=chunk_seeds))
-        else:  # AB
-            raw_games.extend(play_games_method1_ab(wrapper_a, wrapper_b, a_color, seeds=chunk_seeds))
+        if guardrail is None:
+            if condition == "GG":
+                white_elo = elo_a if a_color == chess.WHITE else elo_b
+                black_elo = elo_b if a_color == chess.WHITE else elo_a
+                raw_games.extend(batch.play_games(base, [white_elo] * n_chunk, [black_elo] * n_chunk, chunk_seeds))
+            elif condition == "AG":
+                raw_games.extend(play_games_method1(wrapper_a, a_color, opponent_elos=[elo_b] * n_chunk, seeds=chunk_seeds))
+            elif condition == "GB":
+                raw_games.extend(play_games_method1(wrapper_b, b_color, opponent_elos=[elo_a] * n_chunk, seeds=chunk_seeds))
+            else:  # AB
+                raw_games.extend(play_games_method1_ab(wrapper_a, wrapper_b, a_color, seeds=chunk_seeds))
+        else:
+            if condition == "GG":
+                white_elo = elo_a if a_color == chess.WHITE else elo_b
+                black_elo = elo_b if a_color == chess.WHITE else elo_a
+                raw_games.extend(guarded_generation.play_games_guarded(
+                    base, [white_elo] * n_chunk, [black_elo] * n_chunk, chunk_seeds, guardrail, engine_pool,
+                ))
+            elif condition == "AG":
+                raw_games.extend(guarded_generation.play_games_method1_guarded(
+                    wrapper_a, a_color, [elo_b] * n_chunk, chunk_seeds, guardrail, engine_pool,
+                ))
+            elif condition == "GB":
+                raw_games.extend(guarded_generation.play_games_method1_guarded(
+                    wrapper_b, b_color, [elo_a] * n_chunk, chunk_seeds, guardrail, engine_pool,
+                ))
+            else:  # AB
+                raw_games.extend(guarded_generation.play_games_method1_ab_guarded(
+                    wrapper_a, wrapper_b, a_color, chunk_seeds, guardrail, engine_pool,
+                ))
 
     return [
         _game_record(
@@ -366,6 +404,8 @@ def generate_method2_cell_batched(
     root_seed: int,
     checkpoint_identity: str,
     chunk_size: int | None = None,
+    guardrail: StrengthGuardrailConfig | None = None,
+    engine_pool=None,
 ) -> list[dict]:
     """Batched version of generate_method2_cell -- see
     generate_method1_cell_batched's docstring; identical seed derivation and
@@ -376,6 +416,10 @@ def generate_method2_cell_batched(
     how many games are active on the GPU at once, without changing which
     seed any global game_index gets. Default None = one chunk of all
     n_games (previous, unchunked behavior).
+
+    `guardrail`/`engine_pool`: see generate_method1_cell_batched's
+    docstring -- identical additive opt-in mechanism; None (default) is
+    the exact prior behavior.
     """
     orientation = A_WHITE if a_color == chess.WHITE else B_WHITE
     b_color = chess.BLACK if a_color == chess.WHITE else chess.WHITE
@@ -406,30 +450,59 @@ def generate_method2_cell_batched(
         raise ValueError("chunk_size must be positive")
     effective_chunk_size = chunk_size if chunk_size else n_games
 
+    if (guardrail is None) != (engine_pool is None):
+        raise ValueError("guardrail and engine_pool must be supplied together (both or neither)")
+
     raw_games = []
     for start in range(0, n_games, effective_chunk_size):
         chunk_seeds = seeds[start:start + effective_chunk_size]
         n_chunk = len(chunk_seeds)
 
-        if condition == "GG":
-            white_elo = elo_a if a_color == chess.WHITE else elo_b
-            black_elo = elo_b if a_color == chess.WHITE else elo_a
-            raw_games.extend(batch.play_games(base, [white_elo] * n_chunk, [black_elo] * n_chunk, chunk_seeds))
-        elif condition == "AG":
-            raw_games.extend(play_games_method2(
-                base, cnn, table, residual, player_id=player_id_a, player_color=a_color,
-                player_elo=elo_a, opponent_elos=[elo_b] * n_chunk, k=k, seeds=chunk_seeds,
-            ))
-        elif condition == "GB":
-            raw_games.extend(play_games_method2(
-                base, cnn, table, residual, player_id=player_id_b, player_color=b_color,
-                player_elo=elo_b, opponent_elos=[elo_a] * n_chunk, k=k, seeds=chunk_seeds,
-            ))
-        else:  # AB
-            raw_games.extend(play_games_method2_ab(
-                base, cnn, table, residual, player_id_a=player_id_a, player_id_b=player_id_b,
-                a_color=a_color, elo_a=elo_a, elo_b=elo_b, k=k, seeds=chunk_seeds,
-            ))
+        if guardrail is None:
+            if condition == "GG":
+                white_elo = elo_a if a_color == chess.WHITE else elo_b
+                black_elo = elo_b if a_color == chess.WHITE else elo_a
+                raw_games.extend(batch.play_games(base, [white_elo] * n_chunk, [black_elo] * n_chunk, chunk_seeds))
+            elif condition == "AG":
+                raw_games.extend(play_games_method2(
+                    base, cnn, table, residual, player_id=player_id_a, player_color=a_color,
+                    player_elo=elo_a, opponent_elos=[elo_b] * n_chunk, k=k, seeds=chunk_seeds,
+                ))
+            elif condition == "GB":
+                raw_games.extend(play_games_method2(
+                    base, cnn, table, residual, player_id=player_id_b, player_color=b_color,
+                    player_elo=elo_b, opponent_elos=[elo_a] * n_chunk, k=k, seeds=chunk_seeds,
+                ))
+            else:  # AB
+                raw_games.extend(play_games_method2_ab(
+                    base, cnn, table, residual, player_id_a=player_id_a, player_id_b=player_id_b,
+                    a_color=a_color, elo_a=elo_a, elo_b=elo_b, k=k, seeds=chunk_seeds,
+                ))
+        else:
+            if condition == "GG":
+                white_elo = elo_a if a_color == chess.WHITE else elo_b
+                black_elo = elo_b if a_color == chess.WHITE else elo_a
+                raw_games.extend(guarded_generation.play_games_guarded(
+                    base, [white_elo] * n_chunk, [black_elo] * n_chunk, chunk_seeds, guardrail, engine_pool,
+                ))
+            elif condition == "AG":
+                raw_games.extend(guarded_generation.play_games_method2_guarded(
+                    base, cnn, table, residual, player_id=player_id_a, player_color=a_color,
+                    player_elo=elo_a, opponent_elos=[elo_b] * n_chunk, k=k, seeds=chunk_seeds,
+                    config=guardrail, engine_pool=engine_pool,
+                ))
+            elif condition == "GB":
+                raw_games.extend(guarded_generation.play_games_method2_guarded(
+                    base, cnn, table, residual, player_id=player_id_b, player_color=b_color,
+                    player_elo=elo_b, opponent_elos=[elo_a] * n_chunk, k=k, seeds=chunk_seeds,
+                    config=guardrail, engine_pool=engine_pool,
+                ))
+            else:  # AB
+                raw_games.extend(guarded_generation.play_games_method2_ab_guarded(
+                    base, cnn, table, residual, player_id_a=player_id_a, player_id_b=player_id_b,
+                    a_color=a_color, elo_a=elo_a, elo_b=elo_b, k=k, seeds=chunk_seeds,
+                    config=guardrail, engine_pool=engine_pool,
+                ))
 
     return [
         _game_record(
