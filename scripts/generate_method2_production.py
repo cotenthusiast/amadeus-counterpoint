@@ -53,7 +53,9 @@ from amadeus_counterpoint.evaluation.generation.experiment import (
     ORIENTATIONS,
     generate_method2_cell_batched,
 )
+from amadeus_counterpoint.evaluation.generation.guarded_generation import StockfishEnginePool
 from amadeus_counterpoint.evaluation.generation.production import cell_is_complete, write_cell
+from amadeus_counterpoint.evaluation.generation.strength_guardrail import FROZEN_PRODUCTION_CONFIG
 from amadeus_counterpoint.models.chessformer import Chessformer
 
 # Must match the architecture the Broadcast-adapted base checkpoint was
@@ -120,13 +122,28 @@ def main():
         "--only-condition", type=str, default=None, choices=CONDITIONS,
         help="Restrict to one condition. Default: process all four.",
     )
+    parser.add_argument(
+        "--use-strength-guardrail", action="store_true",
+        help="Route every game through the frozen strength-aware guardrail "
+        "(strength_guardrail.FROZEN_PRODUCTION_CONFIG: K=5, Stockfish depth 8, "
+        "lambda=2.0 -- see rollout_quality_exploratory_2026-09-12/"
+        "final_sampler_freeze/FINAL_SAMPLER_REPORT.md). Default: off, i.e. the "
+        "exact prior unguarded behavior -- this flag must be passed explicitly.",
+    )
+    parser.add_argument("--stockfish-path", type=str, default=None,
+                         help="Required if --use-strength-guardrail is set.")
+    parser.add_argument("--gcc-lib-path", type=str, default=None,
+                         help="LD_LIBRARY_PATH entry the Stockfish binary needs (gcc runtime libs).")
+    parser.add_argument("--n-engine-workers", type=int, default=16,
+                         help="Persistent Stockfish worker processes for the guardrail. Ignored if "
+                         "--use-strength-guardrail is not set.")
     args = parser.parse_args()
+
+    if args.use_strength_guardrail and not args.stockfish_path:
+        raise SystemExit("--stockfish-path is required when --use-strength-guardrail is set")
 
     if (args.only_dyad_a is None) != (args.only_dyad_b is None):
         raise SystemExit("--only-dyad-a and --only-dyad-b must be given together")
-    only_dyad = (
-        {args.only_dyad_a, args.only_dyad_b} if args.only_dyad_a is not None else None
-    )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -146,8 +163,30 @@ def main():
         "code_commit": args.code_commit,
         "root_seed": str(args.root_seed),
         "temperature": args.temperature,
+        "strength_guardrail": "on" if args.use_strength_guardrail else "off",
     }
 
+    guardrail = FROZEN_PRODUCTION_CONFIG if args.use_strength_guardrail else None
+    engine_pool = None
+    if args.use_strength_guardrail:
+        engine_pool = StockfishEnginePool(
+            n_workers=args.n_engine_workers, stockfish_path=args.stockfish_path,
+            gcc_lib_path=args.gcc_lib_path, threads=guardrail.threads, hash_mb=guardrail.hash_mb,
+        )
+        print(f"strength guardrail ON: {guardrail}, {args.n_engine_workers} engine workers")
+
+    try:
+        _run_cells(args, player_ids, base, cnn, table, residual, representative_elos, metadata, guardrail, engine_pool)
+    finally:
+        if engine_pool is not None:
+            engine_pool.close()
+            print("engine pool closed")
+
+
+def _run_cells(args, player_ids, base, cnn, table, residual, representative_elos, metadata, guardrail, engine_pool):
+    only_dyad = (
+        {args.only_dyad_a, args.only_dyad_b} if args.only_dyad_a is not None else None
+    )
     for player_id_a, player_id_b in itertools.combinations(player_ids, 2):
         if only_dyad is not None and {player_id_a, player_id_b} != only_dyad:
             continue
@@ -174,6 +213,7 @@ def main():
                     a_color, condition, elo_a, elo_b, args.k, dyad,
                     args.games_per_orientation, args.root_seed, args.checkpoint_identity,
                     chunk_size=args.generation_batch_size,
+                    guardrail=guardrail, engine_pool=engine_pool,
                 )
                 path = write_cell(
                     args.output_root, "method2", dyad, condition, orientation, games, metadata
