@@ -63,7 +63,11 @@ import chess
 import torch
 
 from amadeus_counterpoint.chess import check_end, create_board
-from amadeus_counterpoint.encoding import encode_history, legal_move_mask, policy_index_to_move
+from amadeus_counterpoint.encoding import (
+    encode_history,
+    legal_move_mask,
+    policy_index_to_move,
+)
 from amadeus_counterpoint.evaluation.generation.single import MAX_PLIES
 from amadeus_counterpoint.evaluation.generation.strength_guardrail import (
     StrengthGuardrailConfig,
@@ -394,7 +398,8 @@ def _method2_candidates(base, cnn, table, residual, x, mover_elo_t, opp_elo_t, p
 
 
 def play_games_method2_guarded(base, cnn, table, residual, player_id, player_color, player_elo,
-                                opponent_elos, k, seeds, config: StrengthGuardrailConfig, engine_pool):
+                                opponent_elos, k, seeds, config: StrengthGuardrailConfig, engine_pool,
+                                personalized_base=None):
     """Guarded mirror of `method2_personalized.play_games_method2`
     (single-sided AG/GB): the personalized side uses Method 2's existing
     candidate construction + style rerank as p_behavior (unchanged); the
@@ -408,6 +413,8 @@ def play_games_method2_guarded(base, cnn, table, residual, player_id, player_col
     cnn.eval()
     table.eval()
     residual.eval()
+    if personalized_base is not None:
+        personalized_base.eval()
     device = next(base.parameters()).device
     games = [_GuardedGameState(seed, opponent_elo=elo) for elo, seed in zip(opponent_elos, seeds)]
     generic_forward = _generic_forward_candidates(base, device, config.k)
@@ -421,7 +428,10 @@ def play_games_method2_guarded(base, cnn, table, residual, player_id, player_col
         if is_player_turn:
             mover_elo_t = torch.full((len(active),), player_elo, dtype=torch.float32, device=device)
             player_id_t = torch.full((len(active),), player_id, dtype=torch.long, device=device)
-            return _method2_candidates(base, cnn, table, residual, x, mover_elo_t, opp_elo_t, player_id_t, mask, k)
+            return _method2_candidates(
+                personalized_base if personalized_base is not None else base,
+                cnn, table, residual, x, mover_elo_t, opp_elo_t, player_id_t, mask, k,
+            )
         else:
             player_elos_list = [player_elo] * len(active)
             opp_elos_list = [g.opponent_elo for g in active]
@@ -440,13 +450,18 @@ def play_games_method2_guarded(base, cnn, table, residual, player_id, player_col
 
 
 def play_games_method2_ab_guarded(base, cnn, table, residual, player_id_a, player_id_b, a_color,
-                                   elo_a, elo_b, k, seeds, config: StrengthGuardrailConfig, engine_pool):
+                                   elo_a, elo_b, k, seeds, config: StrengthGuardrailConfig, engine_pool,
+                                   personalized_base_a=None, personalized_base_b=None):
     """Guarded mirror of `method2_personalized.play_games_method2_ab`
     (both sides personalized, Method 2)."""
     base.eval()
     cnn.eval()
     table.eval()
     residual.eval()
+    if personalized_base_a is not None:
+        personalized_base_a.eval()
+    if personalized_base_b is not None:
+        personalized_base_b.eval()
     device = next(base.parameters()).device
     games = [_GuardedGameState(seed) for seed in seeds]
 
@@ -459,7 +474,11 @@ def play_games_method2_ab_guarded(base, cnn, table, residual, player_id_a, playe
         mover_elo_t = torch.full((len(active),), mover_elo, dtype=torch.float32, device=device)
         opp_elo_t = torch.full((len(active),), opp_elo, dtype=torch.float32, device=device)
         mover_id_t = torch.full((len(active),), mover_id, dtype=torch.long, device=device)
-        return _method2_candidates(base, cnn, table, residual, x, mover_elo_t, opp_elo_t, mover_id_t, mask, k)
+        candidate_base = personalized_base_a if is_a_turn else personalized_base_b
+        return _method2_candidates(
+            candidate_base if candidate_base is not None else base,
+            cnn, table, residual, x, mover_elo_t, opp_elo_t, mover_id_t, mask, k,
+        )
 
     _run_batched_guarded_loop(games, get_mover_candidates, engine_pool, config)
 

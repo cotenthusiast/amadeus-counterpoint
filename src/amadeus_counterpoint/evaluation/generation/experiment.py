@@ -33,7 +33,6 @@ import chess
 
 from amadeus_counterpoint.data.sealed_dyads import A_WHITE, B_WHITE, dyad_key
 from amadeus_counterpoint.evaluation.generation import batch, guarded_generation, single
-from amadeus_counterpoint.evaluation.generation.strength_guardrail import StrengthGuardrailConfig
 from amadeus_counterpoint.evaluation.generation.method1_personalized import (
     play_game_method1,
     play_game_method1_ab,
@@ -45,6 +44,9 @@ from amadeus_counterpoint.evaluation.generation.method2_personalized import (
     play_game_method2_ab,
     play_games_method2,
     play_games_method2_ab,
+)
+from amadeus_counterpoint.evaluation.generation.strength_guardrail import (
+    StrengthGuardrailConfig,
 )
 from amadeus_counterpoint.evaluation.seeding import derive_seed
 from amadeus_counterpoint.models.chessformer import Chessformer
@@ -555,3 +557,132 @@ def generate_method2_experiment(
                 ))
 
     return games
+
+
+def generate_method3_cell_batched(
+    wrapper_a: PersonalizedChessformer,
+    wrapper_b: PersonalizedChessformer,
+    base: Chessformer,
+    cnn: MoveStyleCNN,
+    table: PlayerStyleTable,
+    residual: StyleResidual,
+    player_id_a: int,
+    player_id_b: int,
+    a_color: chess.Color,
+    condition: str,
+    elo_a: float,
+    elo_b: float,
+    k: int,
+    dyad: str,
+    n_games: int,
+    root_seed: int,
+    checkpoint_identity: str,
+    chunk_size: int | None = None,
+    guardrail: StrengthGuardrailConfig | None = None,
+    engine_pool=None,
+) -> list[dict]:
+    """Generate one M3 hybrid cell with the existing batched M2 pipeline.
+
+    M3 uses each M1 wrapper only as the base-like policy module for the
+    corresponding personalized M2 turn. Generic turns use ``base`` exactly
+    as in Method 2; candidate masking, top-K selection, style reranking,
+    sampling, and optional strength guardrail are all the existing M2 paths.
+    """
+    orientation = A_WHITE if a_color == chess.WHITE else B_WHITE
+    b_color = chess.BLACK if a_color == chess.WHITE else chess.WHITE
+    seeds = [
+        derive_seed(
+            root_seed=root_seed, dyad=f"method3_hybrid__{dyad}", condition=condition,
+            orientation=orientation, game_index=game_index,
+        )
+        for game_index in range(n_games)
+    ]
+
+    if n_games == 0:
+        return []
+
+    if condition == "GG":
+        a_repr, b_repr = GENERIC_REPRESENTATION_IDENTITY, GENERIC_REPRESENTATION_IDENTITY
+    elif condition == "AG":
+        a_repr, b_repr = wrapper_a.identity, GENERIC_REPRESENTATION_IDENTITY
+    elif condition == "GB":
+        a_repr, b_repr = GENERIC_REPRESENTATION_IDENTITY, wrapper_b.identity
+    elif condition == "AB":
+        a_repr, b_repr = wrapper_a.identity, wrapper_b.identity
+    else:
+        raise ValueError(f"unknown condition: {condition!r}")
+
+    white_repr, black_repr = (a_repr, b_repr) if a_color == chess.WHITE else (b_repr, a_repr)
+
+    if chunk_size is not None and chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    effective_chunk_size = chunk_size if chunk_size else n_games
+
+    if (guardrail is None) != (engine_pool is None):
+        raise ValueError("guardrail and engine_pool must be supplied together (both or neither)")
+
+    raw_games = []
+    for start in range(0, n_games, effective_chunk_size):
+        chunk_seeds = seeds[start:start + effective_chunk_size]
+        n_chunk = len(chunk_seeds)
+
+        if guardrail is None:
+            if condition == "GG":
+                white_elo = elo_a if a_color == chess.WHITE else elo_b
+                black_elo = elo_b if a_color == chess.WHITE else elo_a
+                raw_games.extend(batch.play_games(
+                    base, [white_elo] * n_chunk, [black_elo] * n_chunk, chunk_seeds,
+                ))
+            elif condition == "AG":
+                raw_games.extend(play_games_method2(
+                    base, cnn, table, residual, player_id=player_id_a, player_color=a_color,
+                    player_elo=elo_a, opponent_elos=[elo_b] * n_chunk, k=k, seeds=chunk_seeds,
+                    personalized_base=wrapper_a,
+                ))
+            elif condition == "GB":
+                raw_games.extend(play_games_method2(
+                    base, cnn, table, residual, player_id=player_id_b, player_color=b_color,
+                    player_elo=elo_b, opponent_elos=[elo_a] * n_chunk, k=k, seeds=chunk_seeds,
+                    personalized_base=wrapper_b,
+                ))
+            else:  # AB
+                raw_games.extend(play_games_method2_ab(
+                    base, cnn, table, residual, player_id_a=player_id_a, player_id_b=player_id_b,
+                    a_color=a_color, elo_a=elo_a, elo_b=elo_b, k=k, seeds=chunk_seeds,
+                    personalized_base_a=wrapper_a, personalized_base_b=wrapper_b,
+                ))
+        else:
+            if condition == "GG":
+                white_elo = elo_a if a_color == chess.WHITE else elo_b
+                black_elo = elo_b if a_color == chess.WHITE else elo_a
+                raw_games.extend(guarded_generation.play_games_guarded(
+                    base, [white_elo] * n_chunk, [black_elo] * n_chunk, chunk_seeds,
+                    guardrail, engine_pool,
+                ))
+            elif condition == "AG":
+                raw_games.extend(guarded_generation.play_games_method2_guarded(
+                    base, cnn, table, residual, player_id=player_id_a, player_color=a_color,
+                    player_elo=elo_a, opponent_elos=[elo_b] * n_chunk, k=k, seeds=chunk_seeds,
+                    config=guardrail, engine_pool=engine_pool, personalized_base=wrapper_a,
+                ))
+            elif condition == "GB":
+                raw_games.extend(guarded_generation.play_games_method2_guarded(
+                    base, cnn, table, residual, player_id=player_id_b, player_color=b_color,
+                    player_elo=elo_b, opponent_elos=[elo_a] * n_chunk, k=k, seeds=chunk_seeds,
+                    config=guardrail, engine_pool=engine_pool, personalized_base=wrapper_b,
+                ))
+            else:  # AB
+                raw_games.extend(guarded_generation.play_games_method2_ab_guarded(
+                    base, cnn, table, residual, player_id_a=player_id_a, player_id_b=player_id_b,
+                    a_color=a_color, elo_a=elo_a, elo_b=elo_b, k=k, seeds=chunk_seeds,
+                    config=guardrail, engine_pool=engine_pool,
+                    personalized_base_a=wrapper_a, personalized_base_b=wrapper_b,
+                ))
+
+    return [
+        _game_record(
+            game, game_index, seed, dyad, condition, orientation,
+            checkpoint_identity, white_repr, black_repr,
+        )
+        for game_index, (game, seed) in enumerate(zip(raw_games, seeds))
+    ]

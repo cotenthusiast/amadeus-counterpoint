@@ -11,7 +11,11 @@ import chess
 import torch
 
 from amadeus_counterpoint.chess import check_end, create_board
-from amadeus_counterpoint.encoding import encode_history, legal_move_mask, policy_index_to_move
+from amadeus_counterpoint.encoding import (
+    encode_history,
+    legal_move_mask,
+    policy_index_to_move,
+)
 from amadeus_counterpoint.evaluation.generation.single import MAX_PLIES
 from amadeus_counterpoint.models.chessformer import Chessformer
 from amadeus_counterpoint.models.player_style import PlayerStyleTable, StyleResidual
@@ -42,6 +46,7 @@ def play_game_method2(
     opponent_elo: float,
     k: int,
     seed: int,
+    personalized_base=None,
 ) -> dict:
     """Generate one self-play game with a Method-2 personalized player.
 
@@ -60,6 +65,8 @@ def play_game_method2(
     cnn.eval()
     table.eval()
     residual.eval()
+    if personalized_base is not None:
+        personalized_base.eval()
     device = _infer_device(base)
 
     board = create_board()
@@ -92,7 +99,8 @@ def play_game_method2(
 
             with torch.no_grad():
                 output = score_candidates(
-                    base, cnn, table, residual,
+                    personalized_base if personalized_base is not None else base,
+                    cnn, table, residual,
                     x, mover_elo, opp_elo, player_id_t, mask,
                     k, target_index=None,
                 )
@@ -148,6 +156,8 @@ def play_game_method2_ab(
     elo_b: float,
     k: int,
     seed: int,
+    personalized_base_a=None,
+    personalized_base_b=None,
 ) -> dict:
     """Generate one self-play game where BOTH sides are Method-2 personalized.
 
@@ -167,6 +177,10 @@ def play_game_method2_ab(
     cnn.eval()
     table.eval()
     residual.eval()
+    if personalized_base_a is not None:
+        personalized_base_a.eval()
+    if personalized_base_b is not None:
+        personalized_base_b.eval()
     device = _infer_device(base)
 
     board = create_board()
@@ -204,7 +218,10 @@ def play_game_method2_ab(
 
         with torch.no_grad():
             output = score_candidates(
-                base, cnn, table, residual,
+                (
+                    personalized_base_a if board.turn == a_color else personalized_base_b
+                ) or base,
+                cnn, table, residual,
                 x, mover_elo_t, opp_elo_t, mover_id_t, mask,
                 k, target_index=None,
             )
@@ -271,6 +288,7 @@ def play_games_method2(
     opponent_elos,
     k: int,
     seeds,
+    personalized_base=None,
 ) -> list[dict]:
     """Batched version of play_game_method2: many games, all sharing the
     same player_id/player_color/player_elo (one AG-or-GB cell's worth).
@@ -285,6 +303,8 @@ def play_games_method2(
     cnn.eval()
     table.eval()
     residual.eval()
+    if personalized_base is not None:
+        personalized_base.eval()
     device = _infer_device(base)
 
     games = [_Method2GameState(elo, seed) for elo, seed in zip(opponent_elos, seeds)]
@@ -315,7 +335,8 @@ def play_games_method2(
 
             with torch.no_grad():
                 output = score_candidates(
-                    base, cnn, table, residual, x, mover_elo_t, opp_elo_t, player_id_t, mask,
+                    personalized_base if personalized_base is not None else base,
+                    cnn, table, residual, x, mover_elo_t, opp_elo_t, player_id_t, mask,
                     k, target_index=None,
                 )
 
@@ -383,6 +404,8 @@ def play_games_method2_ab(
     elo_b: float,
     k: int,
     seeds,
+    personalized_base_a=None,
+    personalized_base_b=None,
 ) -> list[dict]:
     """Batched version of play_game_method2_ab: many games, all sharing the
     same player_id_a/player_id_b/a_color/elo_a/elo_b (one AB cell's worth).
@@ -391,6 +414,10 @@ def play_games_method2_ab(
     cnn.eval()
     table.eval()
     residual.eval()
+    if personalized_base_a is not None:
+        personalized_base_a.eval()
+    if personalized_base_b is not None:
+        personalized_base_b.eval()
     device = _infer_device(base)
 
     games = [_Method2ABGameState(seed) for seed in seeds]
@@ -422,7 +449,10 @@ def play_games_method2_ab(
 
         with torch.no_grad():
             output = score_candidates(
-                base, cnn, table, residual, x, mover_elo_t, opp_elo_t, mover_id_t, mask,
+                (
+                    personalized_base_a if active[0].board.turn == a_color else personalized_base_b
+                ) or base,
+                cnn, table, residual, x, mover_elo_t, opp_elo_t, mover_id_t, mask,
                 k, target_index=None,
             )
 
