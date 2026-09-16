@@ -16,7 +16,7 @@
 
 set -eo pipefail
 
-REPO=/mnt/scratch2/users/40482774/repos/amadeus-counterpoint
+REPO=/mnt/scratch2/users/40482774/repos/amadeus-counterpoint-m3
 MAPPING=/mnt/scratch2/users/40482774/paper_artifacts/primary_generation_2026-09-11/cell_mapping.tsv
 OUTPUT_ROOT=/mnt/scratch2/users/40482774/artifacts/synthetic_m3_hybrid_2026-09-17
 STOCKFISH=/mnt/scratch2/users/40482774/tools/stockfish/Stockfish-sf_19/src/stockfish
