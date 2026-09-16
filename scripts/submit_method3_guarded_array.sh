@@ -51,7 +51,7 @@ python3 scripts/generate_method3_production.py \
   --root-seed 20260911 \
   --checkpoint-identity method3-hybrid-2026-09-17-guarded \
   --protocol-version 2 \
-  --code-commit __PRODUCTION_COMMIT__ \
+  --code-commit 7fe6782ff94ec989be531357070a2edf693b182f \
   --generation-batch-size 128 \
   --only-dyad-a "$PLAYER_A" --only-dyad-b "$PLAYER_B" \
   --only-condition "$CONDITION" --only-orientation "$ORIENTATION" \
