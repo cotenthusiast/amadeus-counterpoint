@@ -38,6 +38,7 @@ module load apps/miniconda3/24.4.0
 module load compilers/gcc/14.1.0
 source /mnt/scratch2/users/40482774/venvs/amadeus-counterpoint/bin/activate
 cd "$REPO"
+export PYTHONPATH="$REPO/src${PYTHONPATH:+:$PYTHONPATH}"
 
 python3 scripts/generate_method3_production.py \
   --base-checkpoint /mnt/scratch2/users/40482774/checkpoints/chessformer-79m-broadcast/step_00200000.pt \
