@@ -1,0 +1,44 @@
+{
+  "method_identifier": "method3_hybrid",
+  "branch": "method3-hybrid",
+  "commit_hash": "51ff259963d1eef015203c2b3da6ed5f3444df3b",
+  "timestamp_utc": "2026-09-16T22:37:55Z",
+  "remote_worktree": "/mnt/scratch2/users/40482774/repos/amadeus-counterpoint-m3",
+  "output_root": "/mnt/scratch2/users/40482774/artifacts/synthetic_m3_hybrid_2026-09-17",
+  "checkpoints": {
+    "base": "/mnt/scratch2/users/40482774/checkpoints/chessformer-79m-broadcast/step_00200000.pt",
+    "m1_player_checkpoints": "/mnt/scratch2/users/40482774/checkpoints/method1/player_{0..7}.pt",
+    "m2": "/mnt/scratch2/users/40482774/checkpoints/method2/joint.pt"
+  },
+  "generation": {
+    "players": 8,
+    "dyads": 28,
+    "conditions": ["GG", "AG", "GB", "AB"],
+    "orientations": ["A_WHITE", "B_WHITE"],
+    "games_per_cell": 5000,
+    "expected_cells": 224,
+    "expected_games": 1120000,
+    "k": 5,
+    "root_seed": 20260911,
+    "seed_namespace": "method3_hybrid__<dyad>",
+    "generation_batch_size": 128,
+    "temperature": "1.0"
+  },
+  "sampler": {
+    "strength_guardrail": "on",
+    "lambda": 2.0,
+    "stockfish_depth": 8,
+    "stockfish_threads": 1,
+    "stockfish_hash_mb": 128,
+    "engine_workers": 16
+  },
+  "slurm": {
+    "array": "0-223%8",
+    "time_limit": "02:30:00",
+    "partition": "k2-gpu-a100mig",
+    "cpus_per_task": 16,
+    "memory": "16G",
+    "script": "scripts/submit_method3_guarded_array.sh"
+  },
+  "launch_command": "sbatch scripts/submit_method3_guarded_array.sh"
+}
