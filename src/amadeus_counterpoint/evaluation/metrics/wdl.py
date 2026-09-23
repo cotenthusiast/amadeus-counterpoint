@@ -64,7 +64,12 @@ def wdl_summary(games: Sequence[Mapping[str, object]]) -> dict[str, object]:
             continue
         if not isinstance(result, str):
             raise TypeError(f"completed result must be a string: {result!r}")
-        counts[outcome_for_a_b(result, str(orientation))] += 1
+        outcome = game.get("_wdl_outcome")
+        if outcome is None:
+            outcome = outcome_for_a_b(result, str(orientation))
+        elif outcome not in WDL_OUTCOMES:
+            raise ValueError(f"invalid cached WDL outcome: {outcome!r}")
+        counts[outcome] += 1
 
     completed_count = sum(counts.values())
     total_count = completed_count + censored_count

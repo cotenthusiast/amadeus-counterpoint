@@ -45,13 +45,17 @@ def build_final_results(
     if missing:
         raise ValueError(f"provenance is missing required keys: {sorted(missing)}")
 
-    equal_weight_aggregate = {
-        condition: {
+    equal_weight_aggregate = {}
+    condition_counts = {}
+    for condition in CONDITIONS:
+        count = sum(condition in per_dyad for per_dyad in results_table.values())
+        if not count:
+            continue
+        equal_weight_aggregate[condition] = {
             "wdl": aggregate_equal_dyad_weight(results_table, condition, "wdl"),
             "opening": aggregate_equal_dyad_weight(results_table, condition, "opening"),
         }
-        for condition in CONDITIONS
-    }
+        condition_counts[condition] = count
 
     return {
         "method": method,
@@ -59,6 +63,7 @@ def build_final_results(
         "per_dyad": results_table,
         "bootstrap": bootstrap_results,
         "equal_weight_aggregate": equal_weight_aggregate,
+        "equal_weight_aggregate_dyad_counts": condition_counts,
     }
 
 

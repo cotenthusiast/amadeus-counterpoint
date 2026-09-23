@@ -61,5 +61,8 @@ def aggregate_equal_dyad_weight(results_table: dict, condition: str, metric: str
     values = [
         per_dyad[condition][metric]["mean"]
         for per_dyad in results_table.values()
+        if condition in per_dyad
     ]
+    if not values:
+        raise ValueError(f"no dyads contain condition {condition!r}")
     return sum(values) / len(values)

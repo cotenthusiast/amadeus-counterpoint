@@ -34,8 +34,19 @@ def paired_bootstrap(
         raise ValueError("Provide exactly one of seed or rng")
     random_source = rng if rng is not None else random.Random(seed)
 
-    distances = {condition: [] for condition in _CONDITIONS}
-    contrasts = {condition: [] for condition in ("GG_minus_AB", "AG_minus_AB", "GB_minus_AB")}
+    conditions = tuple(generated_games)
+    distances = {condition: [] for condition in conditions}
+    contrast_pairs = (
+        ("GG_minus_AB", "GG", "AB"),
+        ("AG_minus_AB", "AG", "AB"),
+        ("GB_minus_AB", "GB", "AB"),
+    )
+    available_contrasts = tuple(
+        (name, left, right)
+        for name, left, right in contrast_pairs
+        if left in conditions and right in conditions
+    )
+    contrasts = {name: [] for name, _, _ in available_contrasts}
 
     for _ in range(replicates):
         resampled_real = {}
@@ -45,11 +56,10 @@ def paired_bootstrap(
                 games[random_source.randrange(len(games))]
                 for _ in range(len(games))
             ]
-        for condition in _CONDITIONS:
+        for condition in conditions:
             distances[condition].append(metric(generated_games[condition], resampled_real))
 
-        contrasts["GG_minus_AB"].append(distances["GG"][-1] - distances["AB"][-1])
-        contrasts["AG_minus_AB"].append(distances["AG"][-1] - distances["AB"][-1])
-        contrasts["GB_minus_AB"].append(distances["GB"][-1] - distances["AB"][-1])
+        for name, left, right in available_contrasts:
+            contrasts[name].append(distances[left][-1] - distances[right][-1])
 
     return {"distances": distances, "contrasts": contrasts}

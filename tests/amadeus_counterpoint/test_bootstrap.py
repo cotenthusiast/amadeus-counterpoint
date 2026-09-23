@@ -74,3 +74,28 @@ def test_paired_bootstrap_rejects_an_empty_real_orientation():
 
     with pytest.raises(ValueError, match="A_WHITE"):
         paired_bootstrap({"A_WHITE": [], "B_WHITE": [{"game_id": "b"}]}, generated_games, lambda *_: 0)
+
+
+def test_paired_bootstrap_supports_only_available_conditions():
+    real_games = {
+        "A_WHITE": [{"game_id": "a"}],
+        "B_WHITE": [{"game_id": "b"}],
+    }
+    generated_games = {
+        condition: {"A_WHITE": [{"score": score}], "B_WHITE": [{"score": score}]}
+        for condition, score in {"GG": 3, "AG": 2, "AB": 1}.items()
+    }
+
+    result = paired_bootstrap(
+        real_games,
+        generated_games,
+        lambda generated, _real: generated["A_WHITE"][0]["score"],
+        replicates=2,
+        seed=7,
+    )
+
+    assert set(result["distances"]) == {"GG", "AG", "AB"}
+    assert result["contrasts"] == {
+        "GG_minus_AB": [2, 2],
+        "AG_minus_AB": [1, 1],
+    }

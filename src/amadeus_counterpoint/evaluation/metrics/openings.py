@@ -13,6 +13,26 @@ _TSV_COLUMNS = ("eco", "name", "pgn", "uci", "epd")
 _HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
 
 
+def _position_key(board: chess.Board) -> tuple:
+    """Return the standard-chess state represented by ``Board.epd()``."""
+    ep_square = board.ep_square
+    if ep_square is not None and not board.has_legal_en_passant():
+        ep_square = None
+    return (
+        board.pawns,
+        board.knights,
+        board.bishops,
+        board.rooks,
+        board.queens,
+        board.kings,
+        board.occupied_co[chess.WHITE],
+        board.occupied_co[chess.BLACK],
+        board.turn,
+        board.clean_castling_rights(),
+        ep_square,
+    )
+
+
 def load_opening_index(path: str | Path, commit: str) -> dict[str, object]:
     """Load an explicitly supplied pinned ``dist/all.tsv`` without I/O elsewhere.
 
@@ -30,12 +50,25 @@ def load_opening_index(path: str | Path, commit: str) -> dict[str, object]:
         if reader.fieldnames != list(_TSV_COLUMNS):
             raise ValueError("opening TSV must have eco, name, pgn, uci, epd columns")
         names_by_epd = {}
+        position_key_to_name = {}
         for row in reader:
             epd = row["epd"]
             if epd in names_by_epd:
                 raise ValueError(f"duplicate opening EPD: {epd!r}")
             names_by_epd[epd] = row["name"]
-    return {"commit": commit, "epd_to_name": names_by_epd}
+            fields = epd.split()
+            if len(fields) == 4:
+                try:
+                    board = chess.Board(" ".join((*fields, "0", "1")))
+                except ValueError:
+                    continue
+                if board.epd() == epd:
+                    position_key_to_name[_position_key(board)] = row["name"]
+    return {
+        "commit": commit,
+        "epd_to_name": names_by_epd,
+        "_position_key_to_name": position_key_to_name,
+    }
 
 
 def opening_family(name: str) -> str:
@@ -61,10 +94,17 @@ def classify_opening_family(
         raise TypeError("opening index has invalid 'epd_to_name'")
 
     board = chess.Board()
-    latest_name = names_by_epd.get(board.epd())
+    position_key_to_name = opening_index.get("_position_key_to_name")
+    if isinstance(position_key_to_name, Mapping):
+        latest_name = position_key_to_name.get(_position_key(board))
+    else:
+        latest_name = names_by_epd.get(board.epd())
     for move in moves:
         board.push_uci(move)
-        name = names_by_epd.get(board.epd())
+        if isinstance(position_key_to_name, Mapping):
+            name = position_key_to_name.get(_position_key(board))
+        else:
+            name = names_by_epd.get(board.epd())
         if name is not None:
             latest_name = name
     return opening_family(latest_name) if latest_name is not None else UNKNOWN_OPENING_FAMILY
@@ -80,7 +120,11 @@ def opening_distribution(
             moves = game["moves"]
         except KeyError as error:
             raise ValueError("game record missing 'moves'") from error
-        family = classify_opening_family(moves, opening_index)
+        family = (
+            game["_opening_family"]
+            if "_opening_family" in game
+            else classify_opening_family(moves, opening_index)
+        )
         counts[family] = counts.get(family, 0) + 1
     count = len(games)
     return {family: value / count for family, value in counts.items()} if count else {}

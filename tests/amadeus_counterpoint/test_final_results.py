@@ -52,3 +52,13 @@ def test_final_results_round_trip_through_json(tmp_path):
     read_back = read_final_results(path)
 
     assert read_back == results
+
+
+def test_build_final_results_aggregates_available_conditions_only():
+    results_table = _results_table()
+    del results_table["0__1"]["GB"]
+
+    results = build_final_results("method3_hybrid", results_table, {}, _provenance())
+
+    assert "GB" not in results["equal_weight_aggregate"]
+    assert results["equal_weight_aggregate"]["GG"]["wdl"] == 0.1
