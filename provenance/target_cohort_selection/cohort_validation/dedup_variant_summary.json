@@ -1,0 +1,11 @@
+{
+  "n_raw_all_records": 1186338,
+  "n_raw_has_moves": 1098863,
+  "n_dedup": 1093256,
+  "n_removed_by_content_dedup": 5607,
+  "n_8cohort_dyads_affected_by_dedup": 3,
+  "n_standard_dedup": 1082369,
+  "n_nonstandard_or_null_dedup": 10887,
+  "n_8cohort_dyads_affected_by_variant_filter": 28,
+  "n_target_player_games_nonstandard_variant": 2155
+}

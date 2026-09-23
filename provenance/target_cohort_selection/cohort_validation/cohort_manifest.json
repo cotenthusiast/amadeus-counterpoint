@@ -1,0 +1,358 @@
+{
+  "manifest_version": "1.0",
+  "generated_by": "audit/cohort_validation/scripts/08_manifest.py",
+  "dataset_source": {
+    "description": "Lichess broadcast PGN corpus (lichess_db_broadcast_*.pgn), 79 monthly files",
+    "location": "/home/cotenthusiast/Data/lichess_broadcasts/",
+    "source_date_range": "2020-01 .. 2026-07 (per-file coverage; earliest single-player observed date 2019-11-23)",
+    "audit_version_date": "stage-1 audit under audit/ (audit_report.md, reports/01-06); this manifest is the stage-2 cohort_validation pass"
+  },
+  "target_players": [
+    {
+      "canonical_name": "Carlsen, Magnus",
+      "canonical_id_key": "F:1503014",
+      "fide_id": "1503014",
+      "title": "GM",
+      "identity_classification": "VERIFIED_HIGH_CONFIDENCE",
+      "accepted_raw_aliases": [
+        "Carlsen, Magnus",
+        "Magnus Carlsen",
+        "MagnusCarlsen",
+        "Carlsen Magnus (NOR)"
+      ],
+      "total_games_all_variant_dedup": 2157,
+      "total_games_standard_dedup": 1456
+    },
+    {
+      "canonical_name": "So, Wesley",
+      "canonical_id_key": "F:5202213",
+      "fide_id": "5202213",
+      "title": "GM",
+      "identity_classification": "VERIFIED_WITH_CAVEAT",
+      "accepted_raw_aliases": [
+        "So, Wesley",
+        "Wesley So",
+        "GMWSO",
+        "So Wesley (USA)"
+      ],
+      "total_games_all_variant_dedup": 1795,
+      "total_games_standard_dedup": 1409
+    },
+    {
+      "canonical_name": "Aronian, Levon",
+      "canonical_id_key": "F:13300474",
+      "fide_id": "13300474",
+      "title": "GM",
+      "identity_classification": "VERIFIED_HIGH_CONFIDENCE",
+      "accepted_raw_aliases": [
+        "Aronian, Levon",
+        "Levon Aronian",
+        "Aronian Levon"
+      ],
+      "total_games_all_variant_dedup": 1714,
+      "total_games_standard_dedup": 1241
+    },
+    {
+      "canonical_name": "Caruana, Fabiano",
+      "canonical_id_key": "F:2020009",
+      "fide_id": "2020009",
+      "title": "GM",
+      "identity_classification": "VERIFIED_HIGH_CONFIDENCE",
+      "accepted_raw_aliases": [
+        "Caruana, Fabiano",
+        "Caruana Fabiano (USA)"
+      ],
+      "total_games_all_variant_dedup": 1714,
+      "total_games_standard_dedup": 1561
+    },
+    {
+      "canonical_name": "Vachier-Lagrave, Maxime",
+      "canonical_id_key": "F:623539",
+      "fide_id": "623539",
+      "title": "GM",
+      "identity_classification": "VERIFIED_WITH_CAVEAT",
+      "accepted_raw_aliases": [
+        "Vachier-Lagrave, Maxime",
+        "Maxime Vachier-Lagrave",
+        "Vachier-Lagrave Maxime (FRA)",
+        "LyonBeast"
+      ],
+      "total_games_all_variant_dedup": 1640,
+      "total_games_standard_dedup": 1396
+    },
+    {
+      "canonical_name": "Nakamura, Hikaru",
+      "canonical_id_key": "F:2016192",
+      "fide_id": "2016192",
+      "title": "GM",
+      "identity_classification": "VERIFIED_HIGH_CONFIDENCE",
+      "accepted_raw_aliases": [
+        "Nakamura, Hikaru",
+        "Hikaru Nakamura",
+        "Nakamura Hikaru (USA)"
+      ],
+      "total_games_all_variant_dedup": 1524,
+      "total_games_standard_dedup": 1226
+    },
+    {
+      "canonical_name": "Nepomniachtchi, Ian",
+      "canonical_id_key": "F:4168119",
+      "fide_id": "4168119",
+      "title": "GM",
+      "identity_classification": "VERIFIED_WITH_CAVEAT",
+      "accepted_raw_aliases": [
+        "Nepomniachtchi, Ian",
+        "lachesisQ",
+        "Nepomniachtchi Ian (FID)"
+      ],
+      "total_games_all_variant_dedup": 1440,
+      "total_games_standard_dedup": 1158
+    },
+    {
+      "canonical_name": "Firouzja, Alireza",
+      "canonical_id_key": "F:12573981",
+      "fide_id": "12573981",
+      "title": "GM",
+      "identity_classification": "VERIFIED_HIGH_CONFIDENCE",
+      "accepted_raw_aliases": [
+        "Firouzja, Alireza",
+        "Alireza Firouzja"
+      ],
+      "total_games_all_variant_dedup": 1176,
+      "total_games_standard_dedup": 999
+    }
+  ],
+  "deduplication_rule": {
+    "description": "One row per distinct content_hash (sha1 of normalized White|Black|Date|Result|SAN-move-list) among rows with has_moves=true, keeping the first-occurring record ordered by (src_file, src_game_index). Removes exact-republication broadcast-chapter duplicates only; never removes a game with distinct content.",
+    "rows_removed_corpuswide": 5607,
+    "rows_removed_from_8cohort_dyads": 4,
+    "dyads_affected_in_8cohort": 3
+  },
+  "standard_chess_variant_rule": {
+    "description": "Keep rows where Variant = 'Standard' exactly (case-sensitive; the lowercase 'fischerandom' tag variant is still Chess960 and is excluded, not a typo of Standard). Null/unparseable Variant (3 rows corpus-wide) also excluded, unverified.",
+    "excluded_variants": {
+      "Chess960": 5048,
+      "From Position": 4407,
+      "Fischerandom": 1116,
+      "fischerandom": 425,
+      "Crazyhouse": 59,
+      "King of the Hill": 25,
+      "Antichess": 14,
+      "null_or_unparseable": 3
+    },
+    "rows_excluded_corpuswide": 11097,
+    "games_involving_8cohort_excluded": 2155,
+    "impact_on_8cohort_matrix": "min pairwise edge fell from 42 (all-variant) to 29 (standard-only); all 28 dyads changed, range 4.5%-66.0% games removed per dyad"
+  },
+  "pairwise_real_game_counts": [
+    {
+      "player_A": "Aronian, Levon",
+      "player_B": "Nepomniachtchi, Ian",
+      "games_standard_dedup": 29,
+      "games_all_variant_dedup": 46,
+      "flag": "WEAK"
+    },
+    {
+      "player_A": "So, Wesley",
+      "player_B": "Nepomniachtchi, Ian",
+      "games_standard_dedup": 30,
+      "games_all_variant_dedup": 46,
+      "flag": "WEAK"
+    },
+    {
+      "player_A": "Caruana, Fabiano",
+      "player_B": "Nepomniachtchi, Ian",
+      "games_standard_dedup": 30,
+      "games_all_variant_dedup": 43,
+      "flag": "WEAK"
+    },
+    {
+      "player_A": "Nakamura, Hikaru",
+      "player_B": "Nepomniachtchi, Ian",
+      "games_standard_dedup": 31,
+      "games_all_variant_dedup": 50,
+      "flag": "WEAK"
+    },
+    {
+      "player_A": "Carlsen, Magnus",
+      "player_B": "Aronian, Levon",
+      "games_standard_dedup": 32,
+      "games_all_variant_dedup": 94,
+      "flag": "WEAK"
+    },
+    {
+      "player_A": "Aronian, Levon",
+      "player_B": "Firouzja, Alireza",
+      "games_standard_dedup": 33,
+      "games_all_variant_dedup": 42,
+      "flag": "WEAK"
+    },
+    {
+      "player_A": "Aronian, Levon",
+      "player_B": "Vachier-Lagrave, Maxime",
+      "games_standard_dedup": 34,
+      "games_all_variant_dedup": 63,
+      "flag": "WEAK"
+    },
+    {
+      "player_A": "Nepomniachtchi, Ian",
+      "player_B": "Firouzja, Alireza",
+      "games_standard_dedup": 42,
+      "games_all_variant_dedup": 45,
+      "flag": "USABLE"
+    },
+    {
+      "player_A": "Vachier-Lagrave, Maxime",
+      "player_B": "Firouzja, Alireza",
+      "games_standard_dedup": 44,
+      "games_all_variant_dedup": 48,
+      "flag": "USABLE"
+    },
+    {
+      "player_A": "So, Wesley",
+      "player_B": "Firouzja, Alireza",
+      "games_standard_dedup": 46,
+      "games_all_variant_dedup": 69,
+      "flag": "USABLE"
+    },
+    {
+      "player_A": "So, Wesley",
+      "player_B": "Aronian, Levon",
+      "games_standard_dedup": 50,
+      "games_all_variant_dedup": 69,
+      "flag": "USABLE"
+    },
+    {
+      "player_A": "Vachier-Lagrave, Maxime",
+      "player_B": "Nakamura, Hikaru",
+      "games_standard_dedup": 54,
+      "games_all_variant_dedup": 77,
+      "flag": "USABLE"
+    },
+    {
+      "player_A": "Caruana, Fabiano",
+      "player_B": "Vachier-Lagrave, Maxime",
+      "games_standard_dedup": 54,
+      "games_all_variant_dedup": 59,
+      "flag": "USABLE"
+    },
+    {
+      "player_A": "Carlsen, Magnus",
+      "player_B": "Vachier-Lagrave, Maxime",
+      "games_standard_dedup": 55,
+      "games_all_variant_dedup": 78,
+      "flag": "USABLE"
+    },
+    {
+      "player_A": "Aronian, Levon",
+      "player_B": "Caruana, Fabiano",
+      "games_standard_dedup": 57,
+      "games_all_variant_dedup": 71,
+      "flag": "USABLE"
+    },
+    {
+      "player_A": "Caruana, Fabiano",
+      "player_B": "Firouzja, Alireza",
+      "games_standard_dedup": 59,
+      "games_all_variant_dedup": 66,
+      "flag": "USABLE"
+    },
+    {
+      "player_A": "Aronian, Levon",
+      "player_B": "Nakamura, Hikaru",
+      "games_standard_dedup": 64,
+      "games_all_variant_dedup": 86,
+      "flag": "STRONG"
+    },
+    {
+      "player_A": "Vachier-Lagrave, Maxime",
+      "player_B": "Nepomniachtchi, Ian",
+      "games_standard_dedup": 65,
+      "games_all_variant_dedup": 72,
+      "flag": "STRONG"
+    },
+    {
+      "player_A": "Nakamura, Hikaru",
+      "player_B": "Firouzja, Alireza",
+      "games_standard_dedup": 65,
+      "games_all_variant_dedup": 72,
+      "flag": "STRONG"
+    },
+    {
+      "player_A": "So, Wesley",
+      "player_B": "Nakamura, Hikaru",
+      "games_standard_dedup": 68,
+      "games_all_variant_dedup": 93,
+      "flag": "STRONG"
+    },
+    {
+      "player_A": "Caruana, Fabiano",
+      "player_B": "Nakamura, Hikaru",
+      "games_standard_dedup": 71,
+      "games_all_variant_dedup": 81,
+      "flag": "STRONG"
+    },
+    {
+      "player_A": "So, Wesley",
+      "player_B": "Vachier-Lagrave, Maxime",
+      "games_standard_dedup": 77,
+      "games_all_variant_dedup": 105,
+      "flag": "STRONG"
+    },
+    {
+      "player_A": "Carlsen, Magnus",
+      "player_B": "Nepomniachtchi, Ian",
+      "games_standard_dedup": 78,
+      "games_all_variant_dedup": 123,
+      "flag": "STRONG"
+    },
+    {
+      "player_A": "So, Wesley",
+      "player_B": "Caruana, Fabiano",
+      "games_standard_dedup": 85,
+      "games_all_variant_dedup": 89,
+      "flag": "STRONG"
+    },
+    {
+      "player_A": "Carlsen, Magnus",
+      "player_B": "Firouzja, Alireza",
+      "games_standard_dedup": 97,
+      "games_all_variant_dedup": 107,
+      "flag": "STRONG"
+    },
+    {
+      "player_A": "Carlsen, Magnus",
+      "player_B": "Caruana, Fabiano",
+      "games_standard_dedup": 102,
+      "games_all_variant_dedup": 120,
+      "flag": "STRONG"
+    },
+    {
+      "player_A": "Carlsen, Magnus",
+      "player_B": "So, Wesley",
+      "games_standard_dedup": 107,
+      "games_all_variant_dedup": 169,
+      "flag": "STRONG"
+    },
+    {
+      "player_A": "Carlsen, Magnus",
+      "player_B": "Nakamura, Hikaru",
+      "games_standard_dedup": 123,
+      "games_all_variant_dedup": 158,
+      "flag": "STRONG"
+    }
+  ],
+  "cohort_size_recommendation": {
+    "recommended_size": 8,
+    "authoritative_min_edge": 29,
+    "alternative_considered": "7 players (drop Nepomniachtchi), min edge 32, if a stricter per-dyad floor is required",
+    "rejected": "9 players -- best-9 combination has LOWER total internal games (1581) than best-8 (1682), drops two well-established cohort members for three much-younger players with shorter track records, and its own runner-up gap is a fragile isolated peak (min edge falls from 22 to 16 for candidate #2)"
+  },
+  "known_caveats": [
+    "So/Wesley (GMWSO), Vachier-Lagrave/Maxime (LyonBeast), and Nepomniachtchi/Ian (lachesisQ) were auto-flagged 'needs_review' by the corpus's Tier-A alias check (their Lichess-username aliases share no text token/letter-signature with the conventional name spelling); manually verified via consistent FIDE ID + plausible rating/date/title -- see 03_identity_verification.md.",
+    "Aronian (~30 games) and Firouzja (~21 games) each have a small, immaterial set of country-code-suffixed raw name spellings (e.g. 'Aronian Levon (ARM)') that carry no FIDE tag and were NOT merged into their main identity by the conservative canonical-key rule (the appended country code changes the sorted key). Not included in any total_games figure in this manifest. Disclosed, not silently corrected.",
+    "7 of 28 dyads are WEAK (<40 standard-chess games): all involve Aronian and/or Nepomniachtchi. Weakest is Aronian-Nepomniachtchi at 29 games. Treat any per-dyad point estimate from these as high-variance.",
+    "Missing-Elo and missing-Date rates vary by dyad from ~2% to ~38%; see 06_dyad_adequacy.md.",
+    "This manifest defines the cohort/filter protocol only; it does not copy or transform the underlying games. Downstream code must apply the deduplication_rule and standard_chess_variant_rule exactly as stated to reproduce these counts."
+  ]
+}
