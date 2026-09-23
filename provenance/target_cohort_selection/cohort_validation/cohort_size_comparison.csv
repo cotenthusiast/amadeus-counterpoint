@@ -1,0 +1,5 @@
+cohort_size,players,n_dyads,min_edge,p10_edge,median_edge,mean_edge,max_edge,total_internal_games,min_outside_cohort_games,median_outside_cohort_games,min_total_games_any_player,date_coverage,edges_<20,edges_<30,edges_<40,edges_<50,edges_>=50,edges_>=100
+6,"Carlsen, Magnus, So, Wesley, Aronian, Levon, Caruana, Fabiano, Vachier-Lagrave, Maxime, Nakamura, Hikaru",15,59,65.4,86.0,94.1,169,1412,1029,1282.0,1524,2019-11-23 .. 2026-07-22,0,0,0,0,15,4
+7,"Carlsen, Magnus, So, Wesley, Aronian, Levon, Caruana, Fabiano, Vachier-Lagrave, Maxime, Nakamura, Hikaru, Nepomniachtchi, Ian",21,43,46.0,78.0,85.3,169,1792,979,1224.0,1440,2019-11-23 .. 2026-07-22,0,0,0,3,18,5
+8,"Carlsen, Magnus, So, Wesley, Aronian, Levon, Caruana, Fabiano, Vachier-Lagrave, Maxime, Nakamura, Hikaru, Nepomniachtchi, Ian, Firouzja, Alireza",28,42,45.7,72.0,80.0,169,2241,727,1146.5,1176,2019-11-23 .. 2026-07-22,0,0,0,6,22,6
+9,"Carlsen, Magnus, So, Wesley, Aronian, Levon, Caruana, Fabiano, Vachier-Lagrave, Maxime, Giri, Anish, Nepomniachtchi, Ian, Duda, Jan-Krzysztof, Firouzja, Alireza",36,28,34.0,50.5,63.6,169,2290,723,1148.0,1176,2019-11-23 .. 2026-07-22,0,2,7,17,19,5
