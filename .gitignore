@@ -123,6 +123,10 @@ temp/
 *.tmp
 *.log
 
+# Local-only dumping ground: agentic-session planning docs, branding/design
+# assets, and anything else that isn't paper/code/results content
+local_scratch/
+
 # Intentional test fixtures may be tracked explicitly
 !tests/fixtures/
 !tests/fixtures/**
