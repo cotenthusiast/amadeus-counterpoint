@@ -1,0 +1,67 @@
+{
+  "authority_rule": "Use complete final sealed result JSONs; exclude historical tournament outputs.",
+  "authoritative": [
+    {
+      "method": "M1",
+      "remote_path": "/mnt/scratch2/users/40482774/paper_artifacts/final_sealed_eval_2026-09-16/method1_results.json",
+      "local_mirror": "/home/cotenthusiast/Projects/amadeus-counterpoint/paper_results/source/method1_results.json",
+      "status": "finalized and complete"
+    },
+    {
+      "method": "M2",
+      "remote_path": "/mnt/scratch2/users/40482774/paper_artifacts/final_sealed_eval_2026-09-16/method2_results.json",
+      "local_mirror": "/home/cotenthusiast/Projects/amadeus-counterpoint/paper_results/source/method2_results.json",
+      "status": "finalized and complete"
+    },
+    {
+      "method": "M3",
+      "remote_path": "/mnt/scratch2/users/40482774/paper_artifacts/final_sealed_eval_2026-09-16/method3_final_complete_results.json",
+      "local_mirror": "/home/cotenthusiast/Projects/amadeus-counterpoint/paper_results/source/method3_final_complete_results.json",
+      "status": "finalized and complete"
+    },
+    {
+      "role": "individual validation",
+      "remote_path": "/mnt/scratch2/users/40482774/paper_artifacts/personalization_identity_diagnostic_2026-09-11/personalization_identity_diagnostic.json",
+      "local_mirror": "/home/cotenthusiast/Projects/amadeus-counterpoint/paper_results/source/personalization_identity_diagnostic.json",
+      "status": "finalized nonsealed diagnostic"
+    },
+    {
+      "role": "M1 nonsealed marginal fidelity",
+      "remote_path": "/mnt/scratch2/users/40482774/paper_artifacts/guarded_m1_complete_preliminary_2026-09-14/nonsealed_real_comparison.json",
+      "local_mirror": "/home/cotenthusiast/Projects/amadeus-counterpoint/paper_results/source/m1_nonsealed_real_comparison.json",
+      "status": "finalized preliminary individual-fidelity diagnostic"
+    },
+    {
+      "role": "sealed pre-evaluation manifest",
+      "remote_path": "/mnt/scratch2/users/40482774/paper_artifacts/final_sealed_eval_2026-09-16/PRE_EVAL_MANIFEST.md"
+    },
+    {
+      "role": "sealed production manifest",
+      "remote_path": "/mnt/scratch2/users/40482774/paper_artifacts/final_sealed_eval_2026-09-16/production_manifest.json"
+    },
+    {
+      "role": "M3 provenance",
+      "remote_path": "/mnt/scratch2/users/40482774/paper_artifacts/m3_provenance_2026-09-17.json"
+    }
+  ],
+  "superseded_or_excluded": [
+    {
+      "path": "/mnt/scratch2/users/40482774/paper_artifacts/final_sealed_eval_2026-09-16/method3_provisional_results_missing_5__6_GB.json",
+      "reason": "Superseded provisional M3 file; missing 5__6 GB."
+    },
+    {
+      "path": "/mnt/scratch2/users/40482774/paper_artifacts/historical_round_robin_2019/analysis.json",
+      "reason": "Historical tournament experiment explicitly excluded from the paper."
+    },
+    {
+      "path": "/mnt/scratch2/users/40482774/paper_artifacts/guarded_m1_complete_preliminary_2026-09-14/",
+      "reason": "Preliminary M1 artifact, not the final sealed pairwise source."
+    }
+  ],
+  "known_conflicts_or_manual_checks": [
+    "M3 provisional and complete files differ because the provisional file excluded 5__6 GB; use only the complete file.",
+    "M1/M2 final evaluator commit is 980405aa..., while M3 generation provenance is 51ff259... and M3 final evaluation JSON is 5b56fb....",
+    "The M1 nonsealed marginal artifact uses a self-defined opening taxonomy, not the pinned sealed taxonomy.",
+    "Final JSONs contain per-dyad bootstrap intervals but no aggregate confidence-interval fields."
+  ]
+}

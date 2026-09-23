@@ -1,0 +1,531 @@
+{
+  "Magnus Carlsen": {
+    "player_id": 0,
+    "n_holdout_games_method1_split": 179,
+    "split_report": {
+      "total_eligible_games": 894,
+      "train_games": 715,
+      "val_games": 179,
+      "train_decisions_before_balancing": 34491,
+      "val_decisions_before_balancing": 8339
+    },
+    "first_move": {
+      "n_white_games": 85,
+      "too_small_for_confident_comparison": false,
+      "real_frequencies_named": {
+        "e4": 0.5294117647058824,
+        "d4": 0.29411764705882354,
+        "Nf3": 0.047058823529411764,
+        "c4": 0.08235294117647059,
+        "other": 0.04705882352941171
+      },
+      "raw_uci_counts": {
+        "e2e4": 45,
+        "d2d4": 25,
+        "g1f3": 4,
+        "c2c4": 7,
+        "e2e3": 1,
+        "b2b3": 3
+      },
+      "tv_personalized_vs_real": 0.09040924369747896,
+      "tv_generic_vs_real": 0.1266628151260504,
+      "personalized_closer_to_real": true
+    },
+    "opening_family": {
+      "n_games": 179,
+      "too_small_for_confident_comparison": false,
+      "real_distribution": {
+        "Ruy Lopez": 0.08379888268156424,
+        "Queen's Gambit Declined": 0.03910614525139665,
+        "Pirc Defense": 0.00558659217877095,
+        "Indian Defense": 0.1005586592178771,
+        "King's Indian Defense": 0.0446927374301676,
+        "Nimzo-Indian Defense": 0.03910614525139665,
+        "Reti Opening": 0.027932960893854747,
+        "Nimzowitsch Defense": 0.01675977653631285,
+        "Sicilian Defense": 0.22905027932960895,
+        "Caro-Kann Defense": 0.027932960893854747,
+        "Philidor Defense": 0.00558659217877095,
+        "Italian Game": 0.0446927374301676,
+        "Queen's Pawn Game": 0.07262569832402235,
+        "English Opening": 0.07262569832402235,
+        "English Opening, Reversed Sicilian": 0.01675977653631285,
+        "Queen's Pawn Game (unclassified reply)": 0.0223463687150838,
+        "French Defense, Winawer/Classical": 0.0111731843575419,
+        "Four Knights Game": 0.01675977653631285,
+        "Modern Defense": 0.01675977653631285,
+        "Van't Kruijs Opening": 0.00558659217877095,
+        "Anderssen's Opening": 0.00558659217877095,
+        "Slav Defense": 0.01675977653631285,
+        "Bird Opening": 0.00558659217877095,
+        "French Defense": 0.0223463687150838,
+        "Petrov's Defense": 0.0111731843575419,
+        "Bishop's Opening": 0.00558659217877095,
+        "Nimzo-Larsen Attack": 0.0223463687150838,
+        "Scandinavian Defense": 0.0111731843575419
+      },
+      "tv_personalized_vs_real": 0.22743591380686354,
+      "tv_generic_vs_real": 0.263742118914605,
+      "personalized_closer_to_real": true
+    }
+  },
+  "Wesley So": {
+    "player_id": 1,
+    "n_holdout_games_method1_split": 185,
+    "split_report": {
+      "total_eligible_games": 925,
+      "train_games": 740,
+      "val_games": 185,
+      "train_decisions_before_balancing": 33599,
+      "val_decisions_before_balancing": 8607
+    },
+    "first_move": {
+      "n_white_games": 99,
+      "too_small_for_confident_comparison": false,
+      "real_frequencies_named": {
+        "e4": 0.5656565656565656,
+        "d4": 0.3434343434343434,
+        "Nf3": 0.050505050505050504,
+        "c4": 0.030303030303030304,
+        "other": 0.010101010101010166
+      },
+      "raw_uci_counts": {
+        "e2e4": 56,
+        "d2d4": 34,
+        "b2b3": 1,
+        "g1f3": 5,
+        "c2c4": 3
+      },
+      "tv_personalized_vs_real": 0.07582900432900433,
+      "tv_generic_vs_real": 0.10742900432900436,
+      "personalized_closer_to_real": true
+    },
+    "opening_family": {
+      "n_games": 185,
+      "too_small_for_confident_comparison": false,
+      "real_distribution": {
+        "Sicilian Defense": 0.14054054054054055,
+        "Indian Defense": 0.11351351351351352,
+        "Ruy Lopez": 0.10810810810810811,
+        "Nimzo-Indian Defense": 0.0972972972972973,
+        "English Opening, Reversed Sicilian": 0.021621621621621623,
+        "Italian Game": 0.11351351351351352,
+        "Reti Opening": 0.06486486486486487,
+        "Queen's Pawn Game": 0.04864864864864865,
+        "Queen's Gambit Accepted": 0.021621621621621623,
+        "Scotch Game": 0.016216216216216217,
+        "Modern Defense": 0.010810810810810811,
+        "Queen's Gambit Declined": 0.02702702702702703,
+        "Nimzo-Larsen Attack": 0.005405405405405406,
+        "Four Knights Game": 0.010810810810810811,
+        "Open Game": 0.010810810810810811,
+        "Grunfeld Defense": 0.005405405405405406,
+        "Caro-Kann Defense": 0.02702702702702703,
+        "Slav Defense": 0.021621621621621623,
+        "King's Indian Defense": 0.043243243243243246,
+        "Petrov's Defense": 0.016216216216216217,
+        "English Opening": 0.043243243243243246,
+        "French Defense": 0.005405405405405406,
+        "Queen's Pawn Game (unclassified reply)": 0.005405405405405406,
+        "Vienna Game": 0.005405405405405406,
+        "French Defense, Winawer/Classical": 0.005405405405405406,
+        "King's Gambit": 0.005405405405405406,
+        "Open Game (unclassified reply)": 0.005405405405405406
+      },
+      "tv_personalized_vs_real": 0.16908899613899614,
+      "tv_generic_vs_real": 0.16967528957528957,
+      "personalized_closer_to_real": true
+    }
+  },
+  "Levon Aronian": {
+    "player_id": 2,
+    "n_holdout_games_method1_split": 183,
+    "split_report": {
+      "total_eligible_games": 915,
+      "train_games": 732,
+      "val_games": 183,
+      "train_decisions_before_balancing": 34039,
+      "val_decisions_before_balancing": 8696
+    },
+    "first_move": {
+      "n_white_games": 99,
+      "too_small_for_confident_comparison": false,
+      "real_frequencies_named": {
+        "e4": 0.7777777777777778,
+        "d4": 0.12121212121212122,
+        "Nf3": 0.020202020202020204,
+        "c4": 0.08080808080808081,
+        "other": 0.0
+      },
+      "raw_uci_counts": {
+        "e2e4": 77,
+        "c2c4": 8,
+        "d2d4": 12,
+        "g1f3": 2
+      },
+      "tv_personalized_vs_real": 0.2906858585858586,
+      "tv_generic_vs_real": 0.32789300144300143,
+      "personalized_closer_to_real": true
+    },
+    "opening_family": {
+      "n_games": 183,
+      "too_small_for_confident_comparison": false,
+      "real_distribution": {
+        "Sicilian Defense": 0.20218579234972678,
+        "English Opening": 0.09836065573770492,
+        "Reti Opening": 0.03825136612021858,
+        "Caro-Kann Defense": 0.04918032786885246,
+        "Ruy Lopez": 0.10382513661202186,
+        "Italian Game": 0.13114754098360656,
+        "Bishop's Opening": 0.02185792349726776,
+        "Indian Defense": 0.07650273224043716,
+        "Queen's Gambit Accepted": 0.03278688524590164,
+        "Scotch Game": 0.02185792349726776,
+        "Petrov's Defense": 0.01639344262295082,
+        "English Opening, Reversed Sicilian": 0.00546448087431694,
+        "Queen's Pawn Game": 0.0546448087431694,
+        "Open Game": 0.01639344262295082,
+        "Slav Defense": 0.01639344262295082,
+        "Nimzo-Indian Defense": 0.03278688524590164,
+        "Queen's Gambit Declined": 0.01092896174863388,
+        "Pirc Defense": 0.01092896174863388,
+        "Nimzo-Larsen Attack": 0.01092896174863388,
+        "Four Knights Game": 0.00546448087431694,
+        "Grunfeld Defense": 0.00546448087431694,
+        "Vienna Game": 0.01639344262295082,
+        "French Defense": 0.01092896174863388,
+        "French Defense, Winawer/Classical": 0.00546448087431694,
+        "King's Indian Defense": 0.00546448087431694
+      },
+      "tv_personalized_vs_real": 0.25795757220921156,
+      "tv_generic_vs_real": 0.2726647150663544,
+      "personalized_closer_to_real": true
+    }
+  },
+  "Fabiano Caruana": {
+    "player_id": 3,
+    "n_holdout_games_method1_split": 214,
+    "split_report": {
+      "total_eligible_games": 1070,
+      "train_games": 856,
+      "val_games": 214,
+      "train_decisions_before_balancing": 43224,
+      "val_decisions_before_balancing": 10655
+    },
+    "first_move": {
+      "n_white_games": 109,
+      "too_small_for_confident_comparison": false,
+      "real_frequencies_named": {
+        "e4": 0.5779816513761468,
+        "d4": 0.21100917431192662,
+        "Nf3": 0.07339449541284404,
+        "c4": 0.11926605504587157,
+        "other": 0.01834862385321101
+      },
+      "raw_uci_counts": {
+        "e2e4": 63,
+        "d2d4": 23,
+        "g1f3": 8,
+        "c2c4": 13,
+        "c2c3": 1,
+        "b2b3": 1
+      },
+      "tv_personalized_vs_real": 0.15705347313237222,
+      "tv_generic_vs_real": 0.18343561598951508,
+      "personalized_closer_to_real": true
+    },
+    "opening_family": {
+      "n_games": 214,
+      "too_small_for_confident_comparison": false,
+      "real_distribution": {
+        "Indian Defense": 0.0794392523364486,
+        "Italian Game": 0.08878504672897196,
+        "Anderssen's Opening": 0.004672897196261682,
+        "Ruy Lopez": 0.14018691588785046,
+        "Sicilian Defense": 0.1308411214953271,
+        "English Opening, Reversed Sicilian": 0.03271028037383177,
+        "King's Indian Defense": 0.028037383177570093,
+        "Nimzo-Indian Defense": 0.07009345794392523,
+        "Caro-Kann Defense": 0.03271028037383177,
+        "Queen's Gambit Declined": 0.028037383177570093,
+        "Queen's Pawn Game": 0.07009345794392523,
+        "Reti Opening": 0.06542056074766354,
+        "English Opening": 0.08878504672897196,
+        "Slav Defense": 0.004672897196261682,
+        "French Defense": 0.004672897196261682,
+        "Petrov's Defense": 0.028037383177570093,
+        "French Defense, Winawer/Classical": 0.037383177570093455,
+        "Vienna Game": 0.009345794392523364,
+        "Saragossa Opening": 0.004672897196261682,
+        "Bogo-Indian/Queen's Indian Defense": 0.009345794392523364,
+        "Four Knights Game": 0.02336448598130841,
+        "Queen's Gambit Accepted": 0.004672897196261682,
+        "Open Game": 0.009345794392523364,
+        "Nimzo-Larsen Attack": 0.004672897196261682
+      },
+      "tv_personalized_vs_real": 0.156953738317757,
+      "tv_generic_vs_real": 0.16768751668891854,
+      "personalized_closer_to_real": true
+    }
+  },
+  "Maxime Vachier-Lagrave": {
+    "player_id": 4,
+    "n_holdout_games_method1_split": 182,
+    "split_report": {
+      "total_eligible_games": 911,
+      "train_games": 729,
+      "val_games": 182,
+      "train_decisions_before_balancing": 32579,
+      "val_decisions_before_balancing": 8732
+    },
+    "first_move": {
+      "n_white_games": 89,
+      "too_small_for_confident_comparison": false,
+      "real_frequencies_named": {
+        "e4": 0.7528089887640449,
+        "d4": 0.07865168539325842,
+        "Nf3": 0.0449438202247191,
+        "c4": 0.12359550561797752,
+        "other": 0.0
+      },
+      "raw_uci_counts": {
+        "e2e4": 67,
+        "g1f3": 4,
+        "c2c4": 11,
+        "d2d4": 7
+      },
+      "tv_personalized_vs_real": 0.30279020866773676,
+      "tv_generic_vs_real": 0.3457116372391653,
+      "personalized_closer_to_real": true
+    },
+    "opening_family": {
+      "n_games": 182,
+      "too_small_for_confident_comparison": false,
+      "real_distribution": {
+        "Grunfeld Defense": 0.1043956043956044,
+        "Sicilian Defense": 0.27472527472527475,
+        "Queen's Pawn Game": 0.04945054945054945,
+        "Indian Defense": 0.027472527472527472,
+        "English Opening": 0.06593406593406594,
+        "Ruy Lopez": 0.15934065934065933,
+        "Caro-Kann Defense": 0.03296703296703297,
+        "French Defense, Winawer/Classical": 0.016483516483516484,
+        "Petrov's Defense": 0.04395604395604396,
+        "Queen's Gambit Accepted": 0.01098901098901099,
+        "King's Indian Defense": 0.038461538461538464,
+        "English Opening, Reversed Sicilian": 0.04395604395604396,
+        "Saragossa Opening": 0.005494505494505495,
+        "Scotch Game": 0.005494505494505495,
+        "Reti Opening": 0.04945054945054945,
+        "Pirc Defense": 0.005494505494505495,
+        "French Defense": 0.01098901098901099,
+        "Italian Game": 0.016483516483516484,
+        "Slav Defense": 0.01098901098901099,
+        "Nimzo-Indian Defense": 0.016483516483516484,
+        "Scandinavian Defense": 0.005494505494505495,
+        "Modern Defense": 0.005494505494505495
+      },
+      "tv_personalized_vs_real": 0.3236796703296703,
+      "tv_generic_vs_real": 0.3554978021978022,
+      "personalized_closer_to_real": true
+    }
+  },
+  "Hikaru Nakamura": {
+    "player_id": 5,
+    "n_holdout_games_method1_split": 149,
+    "split_report": {
+      "total_eligible_games": 747,
+      "train_games": 598,
+      "val_games": 149,
+      "train_decisions_before_balancing": 28951,
+      "val_decisions_before_balancing": 7568
+    },
+    "first_move": {
+      "n_white_games": 75,
+      "too_small_for_confident_comparison": false,
+      "real_frequencies_named": {
+        "e4": 0.38666666666666666,
+        "d4": 0.2,
+        "Nf3": 0.37333333333333335,
+        "c4": 0.04,
+        "other": 0.0
+      },
+      "raw_uci_counts": {
+        "d2d4": 15,
+        "g1f3": 28,
+        "e2e4": 29,
+        "c2c4": 3
+      },
+      "tv_personalized_vs_real": 0.2708904761904762,
+      "tv_generic_vs_real": 0.2955940476190476,
+      "personalized_closer_to_real": true
+    },
+    "opening_family": {
+      "n_games": 149,
+      "too_small_for_confident_comparison": false,
+      "real_distribution": {
+        "Indian Defense": 0.10738255033557047,
+        "Sicilian Defense": 0.09395973154362416,
+        "Petrov's Defense": 0.013422818791946308,
+        "Queen's Pawn Game": 0.08053691275167785,
+        "Queen's Gambit Declined": 0.040268456375838924,
+        "Reti Opening": 0.20134228187919462,
+        "Ruy Lopez": 0.1610738255033557,
+        "Caro-Kann Defense": 0.03355704697986577,
+        "Scotch Game": 0.006711409395973154,
+        "Pirc Defense": 0.013422818791946308,
+        "Nimzo-Indian Defense": 0.04697986577181208,
+        "Bishop's Opening": 0.020134228187919462,
+        "Alekhine's Defense": 0.006711409395973154,
+        "Bogo-Indian/Queen's Indian Defense": 0.020134228187919462,
+        "English Opening": 0.040268456375838924,
+        "Italian Game": 0.026845637583892617,
+        "Four Knights Game": 0.013422818791946308,
+        "Queen's Pawn Game (unclassified reply)": 0.013422818791946308,
+        "English Opening, Reversed Sicilian": 0.013422818791946308,
+        "French Defense, Winawer/Classical": 0.006711409395973154,
+        "Modern Defense": 0.006711409395973154,
+        "Unclassified (self-defined taxonomy)": 0.006711409395973154,
+        "Dutch Defense": 0.013422818791946308,
+        "French Defense": 0.006711409395973154,
+        "Vienna Game": 0.006711409395973154
+      },
+      "tv_personalized_vs_real": 0.2627465963566635,
+      "tv_generic_vs_real": 0.28365690316395015,
+      "personalized_closer_to_real": true
+    }
+  },
+  "Ian Nepomniachtchi": {
+    "player_id": 6,
+    "n_holdout_games_method1_split": 165,
+    "split_report": {
+      "total_eligible_games": 825,
+      "train_games": 660,
+      "val_games": 165,
+      "train_decisions_before_balancing": 30032,
+      "val_decisions_before_balancing": 7823
+    },
+    "first_move": {
+      "n_white_games": 90,
+      "too_small_for_confident_comparison": false,
+      "real_frequencies_named": {
+        "e4": 0.7444444444444445,
+        "d4": 0.07777777777777778,
+        "Nf3": 0.011111111111111112,
+        "c4": 0.12222222222222222,
+        "other": 0.0444444444444444
+      },
+      "raw_uci_counts": {
+        "e2e4": 67,
+        "c2c4": 11,
+        "d2d4": 7,
+        "b2b3": 4,
+        "g1f3": 1
+      },
+      "tv_personalized_vs_real": 0.3377539682539682,
+      "tv_generic_vs_real": 0.37895039682539683,
+      "personalized_closer_to_real": true
+    },
+    "opening_family": {
+      "n_games": 165,
+      "too_small_for_confident_comparison": false,
+      "real_distribution": {
+        "Petrov's Defense": 0.06666666666666667,
+        "Queen's Pawn Game": 0.07878787878787878,
+        "Ruy Lopez": 0.06060606060606061,
+        "Sicilian Defense": 0.22424242424242424,
+        "Indian Defense": 0.09696969696969697,
+        "King's Gambit": 0.024242424242424242,
+        "French Defense": 0.024242424242424242,
+        "English Opening": 0.09090909090909091,
+        "Grunfeld Defense": 0.01818181818181818,
+        "French Defense, Winawer/Classical": 0.012121212121212121,
+        "Nimzo-Indian Defense": 0.06060606060606061,
+        "Italian Game": 0.08484848484848485,
+        "Nimzowitsch Defense": 0.006060606060606061,
+        "Caro-Kann Defense": 0.030303030303030304,
+        "King's Indian Defense": 0.012121212121212121,
+        "English Opening, Reversed Sicilian": 0.01818181818181818,
+        "Reti Opening": 0.01818181818181818,
+        "Open Game (unclassified reply)": 0.006060606060606061,
+        "Modern Defense": 0.006060606060606061,
+        "Dutch Defense": 0.006060606060606061,
+        "Nimzo-Larsen Attack": 0.024242424242424242,
+        "Alekhine's Defense": 0.006060606060606061,
+        "Bishop's Opening": 0.006060606060606061,
+        "Scandinavian Defense": 0.006060606060606061,
+        "Bogo-Indian/Queen's Indian Defense": 0.006060606060606061,
+        "Scotch Game": 0.006060606060606061
+      },
+      "tv_personalized_vs_real": 0.2581541125541126,
+      "tv_generic_vs_real": 0.26786103896103897,
+      "personalized_closer_to_real": true
+    }
+  },
+  "Alireza Firouzja": {
+    "player_id": 7,
+    "n_holdout_games_method1_split": 127,
+    "split_report": {
+      "total_eligible_games": 635,
+      "train_games": 508,
+      "val_games": 127,
+      "train_decisions_before_balancing": 25319,
+      "val_decisions_before_balancing": 5633
+    },
+    "first_move": {
+      "n_white_games": 56,
+      "too_small_for_confident_comparison": false,
+      "real_frequencies_named": {
+        "e4": 0.44642857142857145,
+        "d4": 0.25,
+        "Nf3": 0.14285714285714285,
+        "c4": 0.10714285714285714,
+        "other": 0.0535714285714286
+      },
+      "raw_uci_counts": {
+        "c2c4": 6,
+        "e2e4": 25,
+        "g1f3": 8,
+        "d2d4": 14,
+        "b2b4": 1,
+        "b1c3": 2
+      },
+      "tv_personalized_vs_real": 0.1155142857142857,
+      "tv_generic_vs_real": 0.16053214285714287,
+      "personalized_closer_to_real": true
+    },
+    "opening_family": {
+      "n_games": 127,
+      "too_small_for_confident_comparison": false,
+      "real_distribution": {
+        "English Opening": 0.06299212598425197,
+        "Caro-Kann Defense": 0.07086614173228346,
+        "French Defense": 0.007874015748031496,
+        "Ruy Lopez": 0.07874015748031496,
+        "Reti Opening": 0.08661417322834646,
+        "Petrov's Defense": 0.031496062992125984,
+        "Nimzo-Indian Defense": 0.031496062992125984,
+        "Indian Defense": 0.07874015748031496,
+        "Sicilian Defense": 0.2047244094488189,
+        "Polish Opening": 0.007874015748031496,
+        "King's Indian Defense": 0.05511811023622047,
+        "English Opening, Reversed Sicilian": 0.023622047244094488,
+        "Italian Game": 0.06299212598425197,
+        "Bogo-Indian/Queen's Indian Defense": 0.015748031496062992,
+        "Slav Defense": 0.023622047244094488,
+        "French Defense, Winawer/Classical": 0.023622047244094488,
+        "Pirc Defense": 0.007874015748031496,
+        "Queen's Pawn Game": 0.06299212598425197,
+        "Grunfeld Defense": 0.007874015748031496,
+        "Van Geet Opening": 0.015748031496062992,
+        "Four Knights Game": 0.007874015748031496,
+        "Queen's Gambit Accepted": 0.007874015748031496,
+        "Queen's Gambit Declined": 0.015748031496062992,
+        "Vienna Game": 0.007874015748031496
+      },
+      "tv_personalized_vs_real": 0.16789538807649043,
+      "tv_generic_vs_real": 0.2305732283464567,
+      "personalized_closer_to_real": true
+    }
+  }
+}
