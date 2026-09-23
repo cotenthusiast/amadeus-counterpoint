@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 SOURCE = ROOT / "source"
-AUDIT = ROOT.parent / "results_audit.md"
+AUDIT = ROOT.parent / "docs" / "audits" / "results_audit.md"
 INVENTORY = ROOT / "artifact_inventory.json"
 METHOD_FILES = {
     "M1": SOURCE / "method1_results.json",

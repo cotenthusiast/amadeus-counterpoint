@@ -33,4 +33,4 @@ The nonsealed identity diagnostic recovered the correct player representation as
 - Aggregate bootstrap confidence intervals were not saved in the final JSONs; only per-dyad intervals are available in the source artifacts.
 - M3 is a post-hoc exploratory hybrid and must be labeled as such in the paper.
 
-See [results_audit.md](../results_audit.md) for the full dyad-level audit and [results_cheatsheet.md](results_cheatsheet.md) for a compact lookup.
+See [results_audit.md](../docs/audits/results_audit.md) for the full dyad-level audit and [results_cheatsheet.md](results_cheatsheet.md) for a compact lookup.
